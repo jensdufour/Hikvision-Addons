@@ -1,266 +1,110 @@
-import asyncio
-from ctypes import c_void_p
+import json
+from queue import Queue
+from types import SimpleNamespace
+from unittest.mock import Mock
+
 import pytest
-from pytest_mock import MockerFixture
+
 from config import AppConfig
-from doorbell import DeviceType, Doorbell, Registry
-from mqtt import DEVICE_TRIGGERS_DEFINITIONS, MQTTHandler, extract_device_info
-from ha_mqtt_discoverable import DeviceInfo
-import xml.etree.ElementTree as ET
-
-from sdk.hcnetsdk import VIDEO_INTERCOM_ALARM_ALARMTYPE_ZONE_ALARM, VIDEO_INTERCOM_ALARM_ALARMTYPE_DOOR_NOT_CLOSED, VIDEO_INTERCOM_ALARM_ALARMTYPE_DOOR_NOT_OPEN, VIDEO_INTERCOM_ALARM_ALARMTYPE_TAMPERING_ALARM, VIDEO_INTERCOM_EVENT_EVENTTYPE_UNLOCK_LOG, VideoInterComAlarmType, UnlockType
-from sdk.utils import SDKError
+from doorbell import Doorbell
+from mqtt import MQTTBridge
 
 
-@pytest.fixture()
-def mocked_doorbell(mocker: MockerFixture) -> Doorbell:
-    # Create a fake doorbell and set the parameters read by the handler
-    mocked_doorbell = mocker.patch('doorbell.Doorbell')
-    mocked_doorbell._type = DeviceType.OUTDOOR
-    mocked_doorbell._config.name = "Test doorbell"
-    mocked_doorbell._device_info.serialNumber = lambda: "123"
-    return mocked_doorbell
+@pytest.fixture
+def bridge(mocker):
+    mocker.patch("mqtt.Client")
+    device = Doorbell(AppConfig.Doorbell(name="Front door", model="DS-KV6113-WPE1(B)",
+                     ip="127.0.0.1", username="test", password="test"), Mock())
+    device.serial = "serial1"
+    device.online = True
+    instance = MQTTBridge(AppConfig.MQTT(host="localhost"), [device], Queue(maxsize=2))
+    instance.on_connect(instance.client, None, None, SimpleNamespace(is_failure=False), None)
+    instance.refresh()
+    return instance
 
 
-@pytest.fixture()
-def handler(mocked_doorbell: Doorbell, mocker: MockerFixture) -> MQTTHandler:
-    registry = Registry()
-
-    registry[0] = mocked_doorbell
-
-    # Mock call to get DeviceInfo
-    extract_device_info = mocker.patch('mqtt.extract_device_info', autospec=True)
-    dev_info = DeviceInfo(name="Outdoor unit", identifiers="id")
-    extract_device_info.return_value = dev_info
-
-    # Fake MQTT settings
-    mqtt_config = AppConfig.MQTT(host="localhost")
-
-    # Mock the sensors so no MQTT connection is made
-    mocker.patch("mqtt.Sensor")
-    mocker.patch("mqtt.Switch")
-    mocker.patch("mqtt.DeviceTrigger")
-
-    # Instantiate the handler
-    handler = MQTTHandler(mqtt_config, registry)
-    return handler
-
-'''
-async def test_init(mocked_doorbell, mocker: MockerFixture):
-    registry = Registry()
-
-    registry[0] = mocked_doorbell
-    
-    # Mock call to get DeviceInfo
-    extract_device_info = mocker.patch('mqtt.extract_device_info', autospec=True)
-    dev_info = DeviceInfo(name="test", identifiers="id")
-    extract_device_info.return_value = dev_info
-
-    # Fake MQTT settings
-    mqtt_config = AppConfig.MQTT(host="localhost")
-
-    # Mock the sensors so no MQTT connection is made
-    mocker.patch("mqtt.BinarySensor")
-    mocker.patch("mqtt.Sensor")
-    mocker.patch("mqtt.Switch")
-
-    handler = MQTTHandler(mqtt_config, registry)
-    assert handler is not None
-'''
-
-def test_extract_device_info(mocker: MockerFixture):
-    # Create a fake doorbell and set the parameters read by the handler
-    attributes = {'_config.name': 'test', '_device_info.serialNumber.return_value': "123"}
-    mocked_doorbell = mocker.patch('doorbell.Doorbell', **attributes)
-    mocked_doorbell.get_device_info.return_value = ET.Element("")
-    info = extract_device_info(mocked_doorbell)
-    assert info is not None
+def test_discovery_has_only_scoped_entities(bridge):
+    configs = [json.loads(call.args[1]) for call in bridge.client.publish.call_args_list if call.args[0].endswith("/config")]
+    assert {item["name"] for item in configs} == {"Call state", "Doorbell", "Unlock", "Stop ringing"}
+    for config in configs:
+        assert config["availability_mode"] == "all"
+        if "command_topic" in config:
+            assert config["retain"] is False
+            assert config["qos"] == 0
 
 
-def test_extract_device_info_with_exception(mocker: MockerFixture):
-    # Define a subclass of SDKError that does nothing, to be raised during the test
-    class MockSDKError(SDKError):
-        def __init__(self):
-            pass
-
-    # Create a fake doorbell and set the parameters read by the handler
-    attributes = {'_config.name': 'test', '_device_info.serialNumber.return_value': "123", "get_device_info.side_effect": MockSDKError}
-    mocked_doorbell = mocker.patch('doorbell.Doorbell', **attributes)
-    info = extract_device_info(mocked_doorbell)
-    assert info is not None
-
-'''
-async def test_video_intercom_event(mocker: MockerFixture, mocked_doorbell: Doorbell, handler: MQTTHandler):
-    alarmer = mocker.patch('sdk.hcnetsdk.NET_DVR_ALARMER')
-    video_intercom_event = mocker.patch('sdk.hcnetsdk.NET_DVR_VIDEO_INTERCOM_EVENT')
-    video_intercom_event.byEventType = VIDEO_INTERCOM_EVENT_EVENTTYPE_UNLOCK_LOG
-    video_intercom_event.uEventInfo.struUnlockRecord.wLockID = 0
-    video_intercom_event.uEventInfo.struUnlockRecord.controlSource = lambda: "test_source"
-    
-    asyncio.run(handler.video_intercom_event(mocked_doorbell, 0, alarmer, video_intercom_event, 0, c_void_p(None)))
+@pytest.mark.parametrize("retained,payload,online", [(True, b"PRESS", True), (False, b"ON", True), (False, b"PRESS", False)])
+def test_rejects_unsafe_messages(bridge, retained, payload, online):
+    topic = next(topic for topic in bridge.commands if topic.endswith("/unlock"))
+    bridge.devices[0].online = online
+    bridge.on_message(None, None, SimpleNamespace(topic=topic, payload=payload, retain=retained))
+    assert bridge.inbox.empty()
 
 
-async def test_video_intercom_event_non_existing_id(mocker: MockerFixture, mocked_doorbell: Doorbell, handler: MQTTHandler):
-    """The returned lock ID from the SDK is not valid"""
-    alarmer = mocker.patch('sdk.hcnetsdk.NET_DVR_ALARMER')
-    video_intercom_event = mocker.patch('sdk.hcnetsdk.NET_DVR_VIDEO_INTERCOM_EVENT')
-    video_intercom_event.byEventType = VIDEO_INTERCOM_EVENT_EVENTTYPE_UNLOCK_LOG
-    # Set to return a "strange" door ID
-    video_intercom_event.uEventInfo.struUnlockRecord.wLockID = 24322
-    video_intercom_event.uEventInfo.struUnlockRecord.controlSource = lambda: "test_source"
-    
-    asyncio.run(handler.video_intercom_event(mocked_doorbell, 0, alarmer, video_intercom_event, 0, c_void_p(None)))
+def test_accepts_fresh_command_once(bridge):
+    topic = next(topic for topic in bridge.commands if topic.endswith("/unlock"))
+    bridge.on_message(None, None, SimpleNamespace(topic=topic, payload=b"PRESS", retain=False))
+    message = bridge.inbox.get_nowait()
+    assert message[:3] == ("command", bridge.devices[0], "unlock")
+    assert message[3] == bridge.epoch
+    assert bridge.inbox.empty()
 
 
-class TestDeviceTrigger:
-
-    def test_zone_alarm(self, mocked_doorbell: Doorbell, handler: MQTTHandler, mocker: MockerFixture):
-        video_intercom_alarm = mocker.patch("sdk.hcnetsdk.NET_DVR_VIDEO_INTERCOM_ALARM")
-        video_intercom_alarm.byAlarmType = VIDEO_INTERCOM_ALARM_ALARMTYPE_ZONE_ALARM
-        video_intercom_alarm.uAlarmInfo.struZoneAlarm.byZoneType = 1
-        video_intercom_alarm.uAlarmInfo.struZoneAlarm.dwZonendex = 1
-        
-        asyncio.run(handler.video_intercom_alarm(mocked_doorbell, 0, None, video_intercom_alarm, 0, None))
-
-        # Check that the entity is saved in the dict
-        #assert handler._sensors[mocked_doorbell]["zone_alarm_0"] is not None
- 
-    def test_door_not_open(self, mocked_doorbell: Doorbell, handler: MQTTHandler, mocker: MockerFixture):
-        video_intercom_alarm = mocker.patch("sdk.hcnetsdk.NET_DVR_VIDEO_INTERCOM_ALARM")
-        video_intercom_alarm.byAlarmType = VIDEO_INTERCOM_ALARM_ALARMTYPE_DOOR_NOT_OPEN
-        video_intercom_alarm.wLockID = 0
-        
-        asyncio.run(handler.video_intercom_alarm(mocked_doorbell, 0, None, video_intercom_alarm, 0, None))
-
-        # Check that the entity is saved in the dict
-        assert handler._sensors[mocked_doorbell]["door_not_open_0"] is not None
-
-    def test_door_not_closed(self, mocked_doorbell: Doorbell, handler: MQTTHandler, mocker: MockerFixture):
-        video_intercom_alarm = mocker.patch("sdk.hcnetsdk.NET_DVR_VIDEO_INTERCOM_ALARM")
-        video_intercom_alarm.byAlarmType = VIDEO_INTERCOM_ALARM_ALARMTYPE_DOOR_NOT_CLOSED
-        video_intercom_alarm.wLockID = 0
-        
-        asyncio.run(handler.video_intercom_alarm(mocked_doorbell, 0, None, video_intercom_alarm, 0, None))
-
-        # Check that the entity is saved in the dict
-        assert handler._sensors[mocked_doorbell]["door_not_closed_0"] is not None
-
-    @pytest.mark.parametrize(argnames="alarm_type", argvalues=list(VideoInterComAlarmType))
-    def test_all_alarm_types(self, mocked_doorbell: Doorbell, handler: MQTTHandler, mocker: MockerFixture, alarm_type: VideoInterComAlarmType):
-        if alarm_type in (VideoInterComAlarmType.DOOR_NOT_OPEN, 
-                          VideoInterComAlarmType.DOOR_NOT_CLOSED,
-                          VideoInterComAlarmType.ZONE_ALARM,
-                          VideoInterComAlarmType.DOORBELL_RINGING,
-                          VideoInterComAlarmType.DISMISS_INCOMING_CALL,
-                          VideoInterComAlarmType.DOOR_OPEN_BY_EXTERNAL_FORCE
-                          ):
-            pytest.skip("Tested in another function")
-        video_intercom_alarm = mocker.patch("sdk.hcnetsdk.NET_DVR_VIDEO_INTERCOM_ALARM")
-        video_intercom_alarm.byAlarmType = alarm_type.value
-
-        asyncio.run(handler.video_intercom_alarm(mocked_doorbell, 0, None, video_intercom_alarm, 0, None))
-
-        entity_key_name = DEVICE_TRIGGERS_DEFINITIONS[alarm_type]['name']
-
-        # Check that the entity is saved in the dict
-        assert handler._sensors[mocked_doorbell][entity_key_name] is not None
-    
-    def test_motion_detection(self, mocked_doorbell: Doorbell, handler: MQTTHandler, mocker: MockerFixture):
-        alarm_info = mocker.patch("sdk.hcnetsdk.NET_DVR_ALARMINFO_V30")
-
-        asyncio.run(handler.motion_detection(mocked_doorbell, 0, None, alarm_info, 0, None))
-
-        # Check that the entity is saved in the dict
-        assert handler._sensors[mocked_doorbell]["motion_detection"] is not None
-
-    def test_unknown_alarm_type(self, mocked_doorbell: Doorbell, handler: MQTTHandler, mocker: MockerFixture):
-        video_intercom_alarm = mocker.patch("sdk.hcnetsdk.NET_DVR_VIDEO_INTERCOM_ALARM")
-        video_intercom_alarm.byAlarmType = 999
-
-        asyncio.run(handler.video_intercom_alarm(mocked_doorbell, 0, None, video_intercom_alarm, 0, None))
-    '''
+def test_reconnect_rotates_topics_and_rejects_old_command(bridge):
+    old_topic = next(iter(bridge.commands))
+    bridge.on_disconnect(None, None, None, None, None)
+    bridge.on_connect(bridge.client, None, None, SimpleNamespace(is_failure=False), None)
+    bridge.refresh()
+    assert old_topic not in bridge.commands
+    bridge.on_message(None, None, SimpleNamespace(topic=old_topic, payload=b"PRESS", retain=False))
+    assert bridge.inbox.empty()
 
 
-class TestUnlockUserName:
-    @pytest.fixture(autouse=True)
-    def current_event_loop(self):
-        # The handler fixture schedules its polling task on the current event loop, which asyncio.run()
-        # in earlier tests leaves unset. The events themselves run in asyncio.run(), so that task never runs.
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        yield
-        loop.close()
+def test_ring_is_never_retained_or_replayed(bridge):
+    bridge.client.publish.reset_mock()
+    bridge.ring(bridge.devices[0])
+    assert bridge.client.publish.call_args.kwargs == {"qos": 0, "retain": False}
+    bridge.connected = False
+    bridge.ring(bridge.devices[0])
+    bridge.client.publish.assert_called_once()
 
-    def _unlock_event(self, mocker: MockerFixture, unlock_type: UnlockType, decoded: str = "1"):
-        event = mocker.patch('sdk.hcnetsdk.NET_DVR_VIDEO_INTERCOM_EVENT')
-        event.byEventType = VIDEO_INTERCOM_EVENT_EVENTTYPE_UNLOCK_LOG
-        record = event.uEventInfo.struUnlockRecord
-        record.wLockID = 0
-        record.controlSource = lambda: "4900"
-        record.controlSource_decoded = lambda: decoded
-        record.byUnlockType = unlock_type.value
-        record.dwCardUserID = 0
-        mocker.patch('mqtt.asyncio.sleep')
-        return event
 
-    def test_face_unlock_adds_name(self, mocked_doorbell: Doorbell, handler: MQTTHandler, mocker: MockerFixture):
-        event = self._unlock_event(mocker, UnlockType.FACE)
-        mocked_doorbell.get_card_employee_no.return_value = None
-        mocked_doorbell.get_user_name.return_value = "Alice"
+def test_indoor_does_not_emit_duplicate_ring_or_unlock(bridge):
+    bridge.devices[0].config.model = "DS-KH6320-WTE1"
+    bridge.client.publish.reset_mock()
+    bridge.ring(bridge.devices[0])
+    bridge.client.publish.assert_not_called()
+    bridge.discover(bridge.devices[0])
+    assert bridge.client.publish.call_count == 2
 
-        asyncio.run(handler.video_intercom_event(mocked_doorbell, 0, None, event, 0, c_void_p(None)))
 
-        mocked_doorbell.get_user_name.assert_called_once_with("1")
-        attributes = handler._sensors[mocked_doorbell]['door_0'].set_attributes.call_args.args[0]
-        assert attributes['name'] == "Alice"
+def test_birth_requests_discovery(bridge):
+    bridge.on_message(None, None, SimpleNamespace(topic="homeassistant/status", payload=b"online"))
+    assert bridge.refresh_needed
 
-    def test_face_unlock_with_card_number(self, mocked_doorbell: Doorbell, handler: MQTTHandler, mocker: MockerFixture):
-        event = self._unlock_event(mocker, UnlockType.FACE, decoded="1234567890")
-        mocked_doorbell.get_card_employee_no.return_value = "1"
-        mocked_doorbell.get_user_name.return_value = "Alice"
 
-        asyncio.run(handler.video_intercom_event(mocked_doorbell, 0, None, event, 0, c_void_p(None)))
+def test_old_registration_cannot_cross_connection_epoch(bridge):
+    topic, target = next(iter(bridge.commands.items()))
+    bridge.epoch = "new-connection"
+    bridge.commands[topic] = target
+    bridge.on_message(None, None, SimpleNamespace(topic=topic, payload=b"PRESS", retain=False))
+    assert bridge.inbox.empty()
 
-        mocked_doorbell.get_user_name.assert_called_once_with("1")
-        attributes = handler._sensors[mocked_doorbell]['door_0'].set_attributes.call_args.args[0]
-        assert attributes['name'] == "Alice"
 
-    def test_face_unlock_unknown_user(self, mocked_doorbell: Doorbell, handler: MQTTHandler, mocker: MockerFixture):
-        event = self._unlock_event(mocker, UnlockType.FACE)
-        mocked_doorbell.get_card_employee_no.return_value = None
-        mocked_doorbell.get_user_name.return_value = None
+def test_device_recovery_rejects_previous_command_topic(bridge):
+    old_topic = next(iter(bridge.commands))
+    bridge.devices[0].generation += 1
+    bridge.on_message(None, None, SimpleNamespace(topic=old_topic, payload=b"PRESS", retain=False))
+    assert bridge.inbox.empty()
+    bridge.refresh()
+    assert old_topic not in bridge.commands
+    bridge.client.unsubscribe.assert_any_call(old_topic)
 
-        asyncio.run(handler.video_intercom_event(mocked_doorbell, 0, None, event, 0, c_void_p(None)))
 
-        attributes = handler._sensors[mocked_doorbell]['door_0'].set_attributes.call_args.args[0]
-        assert 'name' not in attributes
-
-    def test_card_unlock_adds_name(self, mocked_doorbell: Doorbell, handler: MQTTHandler, mocker: MockerFixture):
-        event = self._unlock_event(mocker, UnlockType.CARD, decoded="1234567890")
-        mocked_doorbell.get_card_employee_no.return_value = "1"
-        mocked_doorbell.get_user_name.return_value = "Alice"
-
-        asyncio.run(handler.video_intercom_event(mocked_doorbell, 0, None, event, 0, c_void_p(None)))
-
-        mocked_doorbell.get_card_employee_no.assert_called_once_with("1234567890")
-        mocked_doorbell.get_user_name.assert_called_once_with("1")
-        attributes = handler._sensors[mocked_doorbell]['door_0'].set_attributes.call_args.args[0]
-        assert attributes['name'] == "Alice"
-
-    def test_unknown_card_skips_user_lookup(self, mocked_doorbell: Doorbell, handler: MQTTHandler, mocker: MockerFixture):
-        event = self._unlock_event(mocker, UnlockType.CARD, decoded="123")
-        mocked_doorbell.get_card_employee_no.return_value = None
-
-        asyncio.run(handler.video_intercom_event(mocked_doorbell, 0, None, event, 0, c_void_p(None)))
-
-        mocked_doorbell.get_user_name.assert_not_called()
-        attributes = handler._sensors[mocked_doorbell]['door_0'].set_attributes.call_args.args[0]
-        assert 'name' not in attributes
-
-    def test_other_unlock_skips_lookup(self, mocked_doorbell: Doorbell, handler: MQTTHandler, mocker: MockerFixture):
-        event = self._unlock_event(mocker, UnlockType.HOUSEHOLDER)
-
-        asyncio.run(handler.video_intercom_event(mocked_doorbell, 0, None, event, 0, c_void_p(None)))
-
-        mocked_doorbell.get_user_name.assert_not_called()
-        mocked_doorbell.get_card_employee_no.assert_not_called()
+def test_discovery_topics_do_not_embed_raw_serial(bridge):
+    bridge.devices[0].serial = "DS-KV6113-WPE1(B)-ABC123"
+    bridge.client.publish.reset_mock()
+    bridge.discover(bridge.devices[0])
+    for call in bridge.client.publish.call_args_list:
+        assert "(" not in call.args[0]
+        assert ")" not in call.args[0]

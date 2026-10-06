@@ -1,234 +1,123 @@
-from ctypes import CDLL
 import json
-import os
-import time
-from unittest import mock
-import xml.etree.ElementTree as ET
-from pathlib import Path
-from loguru import logger
+from unittest.mock import Mock
 
 import pytest
-from pytest_mock import MockerFixture
+
 from config import AppConfig
 from doorbell import Doorbell
-from sdk.utils import SDKError, loadSDK, setupSDK, shutdownSDK, SDKConfig, SDKLogLevel
+from sdk.utils import SDKError
 
 
 @pytest.fixture
-def mock_doorbell(mocker: MockerFixture) -> Doorbell:
-    # mock SDK
-    sdk = mocker.patch('ctypes.CDLL')
-    config = AppConfig.Doorbell(name="test", ip="localhost", username="admin", password="password")
-
-    return Doorbell(0, config, sdk)
-
-
-@pytest.fixture
-def doorbell(sdk: CDLL):
-    """Connect to a real Doorbell device"""
-    doorbells_config = json.loads(os.environ.get("DOORBELLS"))  # type: ignore
-    config = AppConfig.Doorbell(name="test", ip=doorbells_config[0]['ip'],
-                                username=doorbells_config[0]['username'], password=doorbells_config[0]['password'])
-    doorbell = Doorbell(0, config, sdk)
-    yield doorbell
-
-    doorbell.logout()
+def device():
+    config = AppConfig.Doorbell(name="Front door", model="DS-KV6113-WPE1(B)",
+                                ip="127.0.0.1", username="test", password="test")
+    sdk = Mock()
+    sdk.NET_DVR_GetLastError.return_value = 23
+    sdk.NET_DVR_GetErrorMsg.return_value = b"test error"
+    doorbell = Doorbell(config, sdk)
+    doorbell.online = True
+    doorbell.user_id = 7
+    return doorbell
 
 
-@pytest.mark.skipif(os.environ.get("CI") is not None, reason="Cannot run inside CI pipeline")
-class TestRealDoorbell:
-
-    def test_connect(self, sdk):
-        config = AppConfig.Doorbell(name="test", ip="192.168.0.1", username="admin", password="password")
-        a = Doorbell(0, config, sdk)
-        with pytest.raises(RuntimeError):
-            a.authenticate()
-
-    def test_listening(self, doorbell: Doorbell):
-        doorbell.authenticate()
-        doorbell.setup_alarm()
-
-    def test_call_isapi(self, doorbell: Doorbell):
-        doorbell.authenticate()
-        result = doorbell._call_isapi("GET", "/ISAPI/System/IO/outputs")
-        assert len(result) != 0
-
-        root = ET.fromstring(result)
-
-        assert 'IOOutputPortList' in root.tag
-
-    def test_get_num_outputs(self, doorbell: Doorbell):
-        doorbell.authenticate()
-        outputs = doorbell.get_num_outputs()
-        print(outputs)
-        assert outputs is not None
-    
-    def test_get_device_info(self, doorbell: Doorbell):
-        doorbell.authenticate()
-        info = doorbell.get_device_info()
-        print(info)
-        assert info is not None
-
-    def test_get_call_status(self, doorbell: Doorbell):
-        doorbell.authenticate()
-        pytest.skip("This API is still experimental")
-        logger.info("Getting the call status")
-        status = doorbell.get_call_status()
-        logger.info("Call status {}", status)
-
-    def test_reboot(self, doorbell: Doorbell):
-        '''This test reboots the doorbell!'''
-        doorbell.authenticate()
-        pytest.skip("This will reboot the doorbell!")
-
-        doorbell.reboot_device()
+@pytest.mark.parametrize("state", ["idle", "oncall", "unknown"])
+def test_stop_ringing_ignores_non_ringing(device, mocker, state):
+    request = mocker.patch.object(device, "_call_isapi")
+    assert device.stop_ringing(state) is False
+    request.assert_not_called()
 
 
-class TestGetNumOutputs:
-    # Define a subclass of SDKError that does nothing, to be raised during the test
-    class MockSDKError(SDKError):
-        def __init__(self):
-            pass
-
-    def test_user_config(self, mock_doorbell: Doorbell, mocker: MockerFixture):
-        '''If the user manually specifies the number of outputs, use it'''
-        # Set user ID to simulate a login
-        mock_doorbell.user_id = 0
-        mock_doorbell._config.output_relays = 1
-
-        outputs = mock_doorbell.get_num_outputs()
-        assert outputs == 1
-
-    def test_sdk_device_ability(self, mock_doorbell: Doorbell, mocker: MockerFixture):
-        def mock_get_device_ability(user, *args, **kwargs):
-            output_buffer_array = args[3]
-            output_buffer_array.value = Path("tests/assets/sdk_get_device_ability_ip_view.xml").read_text().encode('utf-8')
-            # call succeeded
-            return True
- 
-        # Set user ID to simulate a login
-        mock_doorbell.user_id = 0
-        mock_doorbell._sdk.NET_DVR_GetDeviceAbility.side_effect = mock_get_device_ability  # type: ignore
-   
-        assert mock_doorbell.get_num_outputs() == 2
-
-    def test_isapi_io_outputs(self, mock_doorbell: Doorbell, mocker: MockerFixture):
-        # Set user ID to simulate a login
-        mock_doorbell.user_id = 0
-
-        # Raise exception with previous method
-        mock_doorbell._sdk.NET_DVR_GetDeviceAbility.side_effect = RuntimeError  # type: ignore
-
-        # Read test XML response and set it as return value of `cast` function
-        xml_response_bytes = Path("tests/assets/isapi_system_io_outputs.xml").read_text().encode('utf-8')
-        mocked_cast = mocker.patch('doorbell.cast')
-        mocked_cast.return_value.value = xml_response_bytes
-
-        outputs = mock_doorbell.get_num_outputs()
-        assert outputs == 2
-  
-    def test_isapi_remote_control(self, mock_doorbell: Doorbell, mocker: MockerFixture):
-        """Fallback to another ISAPI endpoint"""
-
-        # Set user ID to simulate a login
-        mock_doorbell.user_id = 0
-        
-        # Raise exception with previous method
-        mock_doorbell._sdk.NET_DVR_GetDeviceAbility.side_effect = RuntimeError  # type: ignore
-
-        # Raise exception when calling ISAPI helper function the first time
-        mocker.patch('doorbell.call_ISAPI', side_effect=[self.MockSDKError, mock.DEFAULT])
-
-        # Read test XML response and set it as return value of `cast` function
-        xml_response_bytes = Path("tests/assets/isapi_remotecontrol_capabilities.xml").read_text().encode('utf-8')
-        mocked_cast = mocker.patch('doorbell.cast')
-        mocked_cast.return_value.value = xml_response_bytes
-
-        outputs = mock_doorbell.get_num_outputs()
-        assert outputs == 2
-
-"""
-    def test_no_methods_available(self, mock_doorbell: Doorbell, mocker: MockerFixture):
-        '''Raise exception if no more methods are available'''
-        # Set user ID to simulate a login
-        mock_doorbell.user_id = 0
-        
-        # Raise exception with SDK method
-        mock_doorbell._sdk.NET_DVR_GetDeviceAbility.side_effect = RuntimeError  # type: ignore
-
-        # Raise exception when calling ISAPI helper function
-        mocker.patch('doorbell.call_ISAPI', side_effect=self.MockSDKError)
-        with pytest.raises(RuntimeError):
-            mock_doorbell.get_num_outputs()
-
-def test_unlock_door(mock_doorbell: Doorbell):
-    # Set user ID to simulate a login
-    mock_doorbell.user_id = 0
-
-    mock_doorbell.unlock_door(0)
-    mock_doorbell._sdk.NET_DVR_RemoteControl.assert_called_once()  # type: ignore 
+def test_stop_ringing_rejects(device, mocker):
+    request = mocker.patch.object(device, "_call_isapi")
+    assert device.stop_ringing("ringing") is True
+    assert json.loads(request.call_args.args[2]) == {"CallSignal": {"cmdType": "reject"}}
 
 
-def test_unlock_door_isapi(mock_doorbell: Doorbell):
-    # Set user ID to simulate a login
-    mock_doorbell.user_id = 0
-
-    # Simulate error in NET_DVR_RemoteControl
-    mock_doorbell._sdk.NET_DVR_RemoteControl.return_value = 0  # type: ignore 
-    
-    mock_doorbell.unlock_door(0)
-
-    mock_doorbell._sdk.NET_DVR_RemoteControl.assert_called_once()  # type: ignore 
-    # Check that ISAPI call has been made
-    mock_doorbell._sdk.NET_DVR_STDXMLConfig.assert_called_once()   # type: ignore 
-"""
-
-class TestGetUserName:
-    def test_found(self, mock_doorbell: Doorbell, mocker: MockerFixture):
-        response = json.dumps({"UserInfoSearch": {"responseStatusStrg": "OK", "numOfMatches": 1,
-                                                  "UserInfo": [{"employeeNo": "2", "name": "Bob"}]}})
-        call_isapi = mocker.patch.object(mock_doorbell, '_call_isapi', return_value=response)
-
-        assert mock_doorbell.get_user_name("2") == "Bob"
-        method, url, body = call_isapi.call_args.args
-        assert (method, url) == ("POST", "/ISAPI/AccessControl/UserInfo/Search?format=json")
-        assert json.loads(body)["UserInfoSearchCond"]["EmployeeNoList"] == [{"employeeNo": "2"}]
-
-    def test_not_found(self, mock_doorbell: Doorbell, mocker: MockerFixture):
-        response = json.dumps({"UserInfoSearch": {"responseStatusStrg": "NO MATCH", "numOfMatches": 0}})
-        mocker.patch.object(mock_doorbell, '_call_isapi', return_value=response)
-
-        assert mock_doorbell.get_user_name("9") is None
-
-    def test_not_supported(self, mock_doorbell: Doorbell, mocker: MockerFixture):
-        mocker.patch.object(mock_doorbell, '_call_isapi', side_effect=SDKError(mock_doorbell._sdk, "not supported"))
-
-        assert mock_doorbell.get_user_name("1") is None
-
-    def test_invalid_response(self, mock_doorbell: Doorbell, mocker: MockerFixture):
-        mocker.patch.object(mock_doorbell, '_call_isapi', return_value="")
-
-        assert mock_doorbell.get_user_name("1") is None
+@pytest.mark.parametrize("error_code", [23, 10])
+def test_stop_ringing_fallback_is_only_for_unsupported(device, mocker, error_code):
+    device.sdk.NET_DVR_GetLastError.return_value = error_code
+    mocker.patch.object(device, "_call_isapi", side_effect=SDKError(device.sdk, "test failure"))
+    fallback = mocker.patch.object(device, "callsignal")
+    if error_code == 23:
+        assert device.stop_ringing("ringing") is True
+        fallback.assert_called_once_with(3)
+    else:
+        with pytest.raises(SDKError):
+            device.stop_ringing("ringing")
+        fallback.assert_not_called()
 
 
-class TestGetCardEmployeeNo:
-    def test_found(self, mock_doorbell: Doorbell, mocker: MockerFixture):
-        response = json.dumps({"CardInfoSearch": {"responseStatusStrg": "OK", "numOfMatches": 1,
-                                                  "CardInfo": [{"employeeNo": "1", "cardNo": "1234567890", "cardType": "normalCard"}]}})
-        call_isapi = mocker.patch.object(mock_doorbell, '_call_isapi', return_value=response)
+@pytest.mark.parametrize("online,outdoor", [(False, True), (True, False)])
+def test_unlock_fails_closed(device, online, outdoor):
+    device.online = online
+    if not outdoor:
+        device.config.model = "DS-KH6320-WTE1"
+    with pytest.raises(ValueError):
+        device.unlock_door()
+    device.sdk.NET_DVR_RemoteControl.assert_not_called()
 
-        assert mock_doorbell.get_card_employee_no("1234567890") == "1"
-        method, url, body = call_isapi.call_args.args
-        assert (method, url) == ("POST", "/ISAPI/AccessControl/CardInfo/Search?format=json")
-        assert json.loads(body)["CardInfoSearchCond"]["CardNoList"] == [{"cardNo": "1234567890"}]
 
-    def test_not_found(self, mock_doorbell: Doorbell, mocker: MockerFixture):
-        response = json.dumps({"CardInfoSearch": {"responseStatusStrg": "NO MATCH", "numOfMatches": 0}})
-        mocker.patch.object(mock_doorbell, '_call_isapi', return_value=response)
+@pytest.mark.parametrize("error_code", [10, 23])
+def test_unlock_never_retries_ambiguous_failure(device, mocker, error_code):
+    device.sdk.NET_DVR_RemoteControl.return_value = False
+    device.sdk.NET_DVR_GetLastError.return_value = error_code
+    request = mocker.patch.object(device, "_call_isapi")
+    if error_code == 23:
+        device.unlock_door()
+        request.assert_called_once()
+    else:
+        with pytest.raises(SDKError):
+            device.unlock_door()
+        request.assert_not_called()
+    device.sdk.NET_DVR_RemoteControl.assert_called_once()
 
-        assert mock_doorbell.get_card_employee_no("123") is None
 
-    def test_not_supported(self, mock_doorbell: Doorbell, mocker: MockerFixture):
-        mocker.patch.object(mock_doorbell, '_call_isapi', side_effect=SDKError(mock_doorbell._sdk, "not supported"))
+@pytest.mark.parametrize("model,serial", [("DS-KV6113-WPE1", "serial"), ("OTHER", "serial"), ("DS-KV6113-WPE1(B)", "../bad")])
+def test_identity_rejects_other_models_and_invalid_serials(device, mocker, model, serial):
+    mocker.patch.object(device, "_call_isapi", return_value=f"<DeviceInfo><model>{model}</model><serialNumber>{serial}</serialNumber></DeviceInfo>")
+    with pytest.raises(ValueError):
+        device.check_identity()
 
-        assert mock_doorbell.get_card_employee_no("123") is None
+
+def test_identity_accepts_namespace_and_whitespace(device, mocker):
+    mocker.patch.object(device, "_call_isapi", return_value='<DeviceInfo xmlns="urn:hikvision"><model>DS-KV6113-WPE1 (B)</model><serialNumber>serial1</serialNumber></DeviceInfo>')
+    device.check_identity()
+    assert device.serial == "serial1"
+
+
+def test_identity_accepts_model_revision_in_serial(device, mocker):
+    serial = "DS-KV6113-WPE1(B)-ABC123"
+    mocker.patch.object(device, "_call_isapi", return_value=f"<DeviceInfo><model>DS-KV6113-WPE1(B)</model><serialNumber>{serial}</serialNumber></DeviceInfo>")
+    device.check_identity()
+    assert device.serial == serial
+
+
+def test_identity_refuses_replacement_device(device, mocker):
+    device.serial = "original"
+    mocker.patch.object(device, "_call_isapi", return_value='<DeviceInfo><model>DS-KV6113-WPE1(B)</model><serialNumber>replacement</serialNumber></DeviceInfo>')
+    with pytest.raises(ValueError):
+        device.check_identity()
+
+
+@pytest.mark.parametrize("reported,expected", [("idle", "idle"), ("ringing", "ringing"), ("onCall", "oncall"), ("unexpected", "unknown")])
+def test_call_state(device, mocker, reported, expected):
+    mocker.patch.object(device, "_call_isapi", return_value=json.dumps({"CallStatus": {"status": reported}}))
+    assert device.get_call_state() == expected
+
+
+def test_unsupported_status_becomes_unknown_without_repeated_requests(device, mocker):
+    request = mocker.patch.object(device, "_call_isapi", side_effect=SDKError(device.sdk, "unsupported"))
+    assert device.get_call_state() == "unknown"
+    assert device.get_call_state() == "unknown"
+    request.assert_called_once()
+
+
+def test_logout_closes_alarm_before_login_once(device):
+    device.alarm_handle = 9
+    device.logout()
+    device.logout()
+    assert device.sdk.method_calls == [
+        ("NET_DVR_CloseAlarmChan_V30", (9,), {}), ("NET_DVR_Logout_V30", (7,), {})]
+    assert not device.online
+    assert device.user_id == -1

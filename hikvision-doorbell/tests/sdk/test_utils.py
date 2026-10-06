@@ -1,77 +1,22 @@
+from ctypes import c_char_p, cast
+from unittest.mock import Mock
 
-from ctypes import CDLL, c_char_p, cast
-import os
-from pathlib import Path
-
-import pytest
-from doorbell import Doorbell
-from sdk.utils import SDKLogLevel, SDKConfig, call_ISAPI, loadSDK, setupFunctionTypes, setupSDK, shutdownSDK
+from sdk.utils import call_ISAPI, setupSDK
 
 
-def test_loadSDK():
-    sdk = loadSDK()
-    assert sdk is not None
+def test_isapi_request_length_timeout_and_buffer_lifetime():
+    sdk = Mock()
+    response = call_ISAPI(sdk, 7, "GET", "/ISAPI/System/deviceInfo")
+    request = sdk.NET_DVR_STDXMLConfig.call_args.args[1]
+    assert request.dwRequestUrlLen == len(b"GET /ISAPI/System/deviceInfo")
+    assert request.dwRecvTimeOut == 2000
+    assert cast(request.lpRequestUrl, c_char_p).value == b"GET /ISAPI/System/deviceInfo"
+    assert len(response._buffers) == 4
+    assert "lpOutBuffer" not in (response._objects or {})
 
 
-def test_setupFunctionTypes():
-    sdk = loadSDK()
-    setupFunctionTypes(sdk)
-
-
-def test_shutdownSDK():
-    sdk = loadSDK()
-    shutdownSDK(sdk)
-
-
-def test_setupSDK():
-    sdk = loadSDK()
+def test_sdk_connection_attempts_are_bounded():
+    sdk = Mock()
     setupSDK(sdk)
-
-
-def test_setupSDK_with_config(tmp_path: Path):
-    sdk = loadSDK()
-    config: SDKConfig = {
-        'log_level': SDKLogLevel.INFO,
-        'log_dir': str(tmp_path)
-    }
-    setupSDK(sdk, config)
-
-
-def test_setupSDK_with_debug(tmp_path: Path):
-    sdk = loadSDK()
-    config: SDKConfig = {
-        'log_level': SDKLogLevel.DEBUG,
-        'log_dir': str(tmp_path)
-    }
-    setupSDK(sdk, config)
-
-
-def test_setupSDK_with_folder(tmp_path: Path):
-    sdk = loadSDK()
-    config: SDKConfig = {
-        'log_level': SDKLogLevel.DEBUG,
-        'log_dir': str(tmp_path)
-    }
-    setupSDK(sdk, config)
-
-
-def test_setupSDK_with_dev_null():
-    sdk = loadSDK()
-    config: SDKConfig = {
-        'log_level': SDKLogLevel.DEBUG,
-        'log_dir': '/dev/null'
-    }
-    setupSDK(sdk, config)
-
-
-@pytest.mark.skipif(os.environ.get("CI") is not None, reason="Cannot run inside CI pipeline")
-def test_call_ISAPI(sdk: CDLL, doorbell: Doorbell):
-    doorbell.authenticate()
-    output = call_ISAPI(sdk, doorbell.user_id, "GET", "/ISAPI/System/DeviceInfo")
-
-    outputBuffer = output.lpOutBuffer
-    output_char_p = cast(outputBuffer, c_char_p)
-    response_body = output_char_p.value.decode("utf-8")  # type: ignore
-
-    assert output is not None
-    assert len(response_body) > 1
+    sdk.NET_DVR_SetConnectTime.assert_called_once_with(2000, 1)
+    sdk.NET_DVR_SetReconnect.assert_called_once_with(10000, True)

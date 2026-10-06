@@ -1,93 +1,19 @@
-# Development guide
+# Offline Development
 
-The current setup only works for x86/x64 system due to the HikVision SDK native libraries used, and has been tested on a Linux OS (Linux Mint).
+Use Python 3.10 or later and an isolated environment. From `hikvision-doorbell`:
 
-## Requirements
-
-- Python 3.10
-- (optional) A fresh [virtualenv](https://docs.python.org/3/library/venv.html) for this project
-
-## Instructions
-After having cloned the repository, run the following commands from the `hikvision-doorbell` directory.
-
-- Install the required packages
-```bash
-sudo apt update
-sudo apt install python3.10-venv python3.10-dev
-cd ~/Hikvision-Addons/hikvision-doorbell
-python3.10 -m venv venv310
-source venv310/bin/activate
-pip install -r requirements.txt
-deactivate
-```
-- On newer Distro:
-```bash
-# Move to your project directory
-cd ~/Hikvision-Addons
-# Install uv (if you haven't already)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source ~/.bashrc
-# Delete the broken Python 3.14 environment VS Code made
-rm -rf .venv
-# Create a clean Python 3.10 environment
-uv venv .venv --python 3.10
+```sh
+pip install -r requirements-dev.txt
+pytest -q
+flake8 src tests --select=E9,F63,F7,F82 --show-source
 ```
 
-- Export the required environment variables to configure the software (see `development.env.example` for reference)
-```bash
-export DOORBELLS='[{"name":"outdoor", "ip": "192.168.0.1", "username": "user", "password": "password"}]'
-export DOORBELLS='[{"name":"DS-KH9310", "ip": "192.168.0.72", "username": "admin", "password": "Password01"}]'
-export MQTT__HOST=''
-```
+Tests use mock devices, block sockets and block vendor-library loading. Do not disable those guards to make a test pass. The production image installs only runtime requirements.
 
-- Launch the application
-```bash
-python src/main.py
-```
+The main thread serializes device operations. SDK callbacks copy the small event fields to a bounded queue; Paho callbacks queue validated commands. Connection generations, broker epochs and a three-second queue limit discard stale commands. The queue is not a durable command store.
 
-## VSCode
+Keep protocol calls in `src/doorbell.py`, MQTT discovery/transport in `src/mqtt.py`, callback decoding in `src/event.py`, and lifecycle/state handling in `src/main.py`. Do not recreate an entity framework or a second command surface.
 
-- If using VSCode, there is a run configuration already provided.
-    
-    First create a `development.env` file with your own values, then run the application using the integrated VSCode debugger.
-    ```bash
-    cp development.env.example development.env
-    ```
-- Run the application using the integrated VSCode runner (under `Run and Debug`).
+For a Linux smoke test, build the runtime image and load/register/clean up the SDK with networking disabled. Never provide actual device options to that check. CI performs isolated builds on native amd64 and aarch64 runners and has no publishing permission.
 
-## Testing the app locally (VSCode devcontainer)
-For more information see the official HA [guide](https://developers.home-assistant.io/docs/apps/testing).
-
-Inside the _devcontainer_ use the task `Start Home Assistant` to bootstrap the HA supervisor, who will then proceed to locally install HA.
-
-The local instance is accessible under `http://localhost:7123/`.
-
-The app should be visible in the app store.
-
-## Internals
-
-The following diagrams provides an high-level overview of the internal software architecture.
-Third-party extension can be easily added by interfacing with the external **MQTT broker**.
-If a more fine-grained approach is required, it is possible to manually implement new **event** and/or **input** handlers.
-
-<p align="center">
-    <img src="../assets/hikvision-addon-architecture.svg" alt="Software architecture">
-</p>
-
-
-## New releases
-
-The release process is automated using Github Actions.
-See the [workflow file](/.github/workflows/deploy.yml) for the definition of the automated steps.
-
-The manual steps to publish a new release are as follows:
-1. `git checkout` the branch containing the release code
-2. Update the `CHANGELOG.md` file as appropriate 
-   
-   Update the `config.yaml`->`version` to point to the new version
-3. `git commit` the changes
-3. `git tag` using the format `<name of the app>-<version number>`
-    
-    e.g: `git tag doorbell-v3.0.0` to release version `3.0.0` of the addon `doorbell`
-4. `git push --tags` to push the tags to the repository and start the automatic release process
-
+See the root README for firmware acceptance, migration and unresolved distribution terms.

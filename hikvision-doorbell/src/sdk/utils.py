@@ -44,7 +44,7 @@ def loadSDK() -> CDLL:
     logger.info(f"Using OS: {platform.uname()[0]} with architecture: {platform.uname()[4]}")
 
     if platform.uname()[0] == "Windows":
-        hcnetsdk_path = ".\lib-windows64\HCNetSDK.dll"
+        hcnetsdk_path = r".\lib-windows64\HCNetSDK.dll"
     elif platform.uname()[0] == "Linux":
         if platform.uname()[4] == "x86_64":
             hcnetsdk_path = os.path.join("lib-amd64", "libhcnetsdk.so")
@@ -66,6 +66,8 @@ def setupFunctionTypes(lib: CDLL):
     # Arguments
     lib.NET_DVR_Login_V30.argtypes = [c_char_p, WORD, c_char_p, c_char_p, POINTER(NET_DVR_DEVICEINFO_V30)]
     lib.NET_DVR_Logout_V30.argtypes = [c_int]
+    lib.NET_DVR_CloseAlarmChan_V30.argtypes = [LONG]
+    lib.NET_DVR_SetDVRConfig.argtypes = [LONG, DWORD, DWORD, c_void_p, DWORD]
     lib.NET_DVR_GetErrorMsg.argtypes = [POINTER(c_long)]
     lib.NET_DVR_SetDVRMessageCallBack_V50.argtypes = [c_int, fMessageCallBack, c_void_p]
     lib.NET_DVR_SetupAlarmChan_V50.argtypes = [LONG, NET_DVR_SETUPALARM_PARAM_V50, c_char_p, DWORD]
@@ -87,6 +89,9 @@ def setupSDK(sdk: CDLL, config: Optional[SDKConfig] = None):
     sdk_init_result = sdk.NET_DVR_Init()
     if not sdk_init_result:
         raise RuntimeError("Unable to initialize SDK, init returned {}", sdk_init_result)
+
+    sdk.NET_DVR_SetConnectTime(2000, 1)
+    sdk.NET_DVR_SetReconnect(10000, True)
 
     if config:
         result = sdk.NET_DVR_SetLogToFile(config["log_level"].value, bytes(config["log_dir"], 'utf8'), False)
@@ -127,14 +132,13 @@ def call_ISAPI(sdk: CDLL, user_id: int, http_method: str, url: str, requestBody:
     # Input information
     inputStruct = NET_DVR_XML_CONFIG_INPUT()
 
-    urlSize = (c_char * 256)()
-
     # addressof() instead of cast(): cast() links the buffer into its own _objects dict, creating a
     # reference cycle that only the cyclic GC can free. With 2x1MB buffers per call and polling every few
     # seconds that leaked hundreds of MB between GC runs. See GH issue #371.
     requestUrlBuffer = create_string_buffer(bytes(inUrl, "ascii"))
     inputStruct.lpRequestUrl = addressof(requestUrlBuffer)
-    inputStruct.dwRequestUrlLen = len(urlSize)
+    inputStruct.dwRequestUrlLen = len(inUrl.encode("ascii"))
+    inputStruct.dwRecvTimeOut = 2000
 
     inputBuffer = create_string_buffer(bytes(requestBody, "ascii"))
     inputStruct.lpInBuffer = addressof(inputBuffer)

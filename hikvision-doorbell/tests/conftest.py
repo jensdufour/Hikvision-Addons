@@ -1,35 +1,15 @@
-'''Define useful pytest fixtures shared across all the test code'''
-from ctypes import CDLL
-from pathlib import Path
+import ctypes
+import socket
+
 import pytest
-import json
-import os
-from config import AppConfig
-from doorbell import Doorbell
-
-from sdk.utils import SDKConfig, SDKLogLevel, loadSDK, setupSDK, shutdownSDK
 
 
-@pytest.fixture
-def sdk(tmp_path: Path):
-    sdk = loadSDK()
-    sdk_config: SDKConfig = {
-        'log_level': SDKLogLevel.DEBUG,
-        'log_dir': str(tmp_path)
-    }
-    setupSDK(sdk, sdk_config)
-    yield sdk
-
-    shutdownSDK(sdk)
-
-
-@pytest.fixture
-def doorbell(sdk: CDLL):
-    """Connect to a real Doorbell device"""
-    doorbells_config = json.loads(os.environ.get("DOORBELLS"))  # type: ignore
-    config = AppConfig.Doorbell(name="test", ip=doorbells_config[0]['ip'],
-                                username=doorbells_config[0]['username'], password=doorbells_config[0]['password'])
-    doorbell = Doorbell(0, config, sdk)
-    yield doorbell
-
-    doorbell.logout()
+@pytest.fixture(autouse=True)
+def forbid_hardware(monkeypatch):
+    def blocked(*args, **kwargs):
+        raise AssertionError("Offline tests must not open sockets or load the vendor SDK")
+    monkeypatch.setattr(socket.socket, "connect", blocked)
+    monkeypatch.setattr(socket.socket, "connect_ex", blocked)
+    monkeypatch.setattr(socket.socket, "sendto", blocked)
+    monkeypatch.setattr(socket, "create_connection", blocked)
+    monkeypatch.setattr(ctypes.cdll, "LoadLibrary", blocked)
