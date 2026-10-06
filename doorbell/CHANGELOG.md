@@ -12,6 +12,8 @@
 - Include the complete amd64 6.1.9.48 runtime and original notices; retain ARM64 6.1.8.101.
 - Fix firmware ring normalization, native callback/pointer ABI, historical replay and outdoor poll deduplication.
 - Verify read-only compatibility and a supervised ring/dismiss cycle; MQTT/HA delivery, physical controls and recovery remain pending.
-- New configuration, slug and entity IDs require deliberate migration. No HA deployment or published image yet.
+- Correct optional Supervisor MQTT discovery for external brokers and require actual callback registration in native smoke checks.
+- Deploy a protected/manual-start HA pilot with both stations online, six MQTT entities, exact runtime hashes and preserved household configuration. No physical controls or notification automation changes.
+- New configuration, slug and entity IDs require deliberate migration. Full hardware acceptance and release image publication remain pending.
 
 Upstream history remains at commit `8f8b97c6b5731e9979eee28d011db6b860b826e1`.

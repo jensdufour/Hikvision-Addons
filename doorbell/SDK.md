@@ -25,7 +25,7 @@ GET-only probes passed identity, idle state, reject capability and passive subsc
 
 The supervised 6.1.9.48 observation with source `6297283` decoded one current outdoor ring and dismissal, produced exactly one local notification intent, rejected 17 historical callbacks, and completed checked native cleanup. Indoor ringing returned to idle after about 31 seconds; outdoor polling stayed idle. Temporary mute was restored exactly, and the user confirmed quiet. No MQTT client, physical unlock/reject/answer or deployment was involved.
 
-MQTT/HA delivery, answered calls, outage recovery and physical controls remain separate acceptance gates. The SDK upgrade does not replace callback ABI, historical replay or ring-deduplication guards. See [configuration and behavior](DOCS.md).
+The October6 native HA pilot subsequently verified MQTT discovery/availability, exact installed source/SDK hashes, and the running process's bundled SDK/crypto mappings. Real ring-to-HA/phone delivery, answered calls, outage recovery and physical controls remain separate acceptance gates. The SDK upgrade does not replace callback ABI, historical replay or ring-deduplication guards. See [configuration and behavior](DOCS.md).
 
 ## Verification And Recovery
 

@@ -4,7 +4,7 @@
 
 This fork has offline tests, successful read-only SDK checks on both target devices and a supervised local ring/dismiss test, not full hardware acceptance. The [verified state](../README.md#verified-state) and [SDK record](SDK.md) describe exact limits. The manifest is experimental and manual-start. Supervisor builds from this directory; no prebuilt image is required or published by CI.
 
-Installation remains a separately authorized pilot. Add `https://github.com/jensdufour/Hikvision-Addons` as an add-on repository, select Hikvision Doorbell Lite and let Supervisor build it. Enter the two device configurations and MQTT settings before starting; the blank default addresses/passwords intentionally fail validation. Do not start the upstream bridge concurrently.
+For an authorized installation, add `https://github.com/jensdufour/Hikvision-Addons` as an add-on repository, select Hikvision Doorbell Lite and let Supervisor build it. Enter the two device configurations and MQTT settings before starting; the blank default addresses/passwords intentionally fail validation. Do not start the upstream bridge concurrently. The October6 pilot now passes Supervisor build/start and real MQTT discovery/availability; see the root README for the remaining acceptance checks.
 
 ## Options
 
@@ -34,6 +34,8 @@ The supervised press showed that outdoor polling can remain idle while the indoo
 Outdoor polls cannot emit ring events or reset notification deduplication. A current SDK dismissal re-arms the next episode; older SDK events cannot rewind it. A missed dismissal may suppress later notifications until a valid dismissal or new session. Startup suppresses replay, and no arbitrary timeout invents a new press. A clock moving behind the subscription baseline also requires correction and reconnection.
 
 Controls require verified model/serial and a current connection. Command topics rotate with broker/device sessions, retained commands are rejected, and queued commands expire after three seconds. Ambiguous failures are not retried. Failed native cleanup remains tracked and blocks a replacement login while the device stays unavailable.
+
+These guards do not authenticate MQTT publishers. Anyone able to publish to the broker's command topics can request a control action. The pilot retains the household's existing anonymous LAN-only broker policy; use broker authentication and topic ACLs when that trust boundary is insufficient. No public listener is added by this add-on.
 
 Unlock controls the outdoor station's first relay through the existing SDK command, with ISAPI fallback only on error 23. It does not expose an indoor duplicate unlock control. Stop ringing rejects a current incoming call; it does not hang up an established conversation.
 

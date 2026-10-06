@@ -24,13 +24,17 @@ Frigate owns video, snapshots and recordings. Home Assistant owns notifications.
 - [doorbell/DEVELOPMENT.md](doorbell/DEVELOPMENT.md): offline checks and architecture.
 - [MEMORY.md](MEMORY.md): durable constraints, verified evidence and recovery.
 
-The manifest builds locally in Supervisor instead of referencing an unpublished image. It remains experimental and manual-start. Repository preparation is not deployment approval; nothing has been installed in HA by this refactor.
+The manifest builds locally in Supervisor instead of referencing an unpublished image. It remains experimental and manual-start. The user-authorized passive pilot was installed and started on 2026-10-06; automatic updates and watchdog are off while acceptance continues.
 
 Standalone deployment files and stale upstream IDE/issue/funding metadata are removed. Local credentials, options, caches and backups stay ignored; SDK runtime files remain tracked with their original notices.
 
 ## Verified State
 
-Repository checks: 110 offline tests and focused Python lint pass. Fresh amd64 and ARM64 images build and pass version, callback, error-lookup and cleanup checks with networking disabled. These are local results, not a claim of completed GitHub CI or HA installation.
+The HA pilot runs `0.1.0-dev` from reviewed source `1a1ada8`, with protection enabled and no extra host/Core permissions. Both target stations are online and idle. HA discovered exactly six MQTT entities across two devices; buttons and the event remain `unknown` until used or triggered, which is not an availability failure.
+
+All 32 installed Python/amd64 SDK files match Git, and the running process mapped the bundled SDK and crypto libraries. Supervisor is healthy, both connections are logged, and no add-on errors were present. All 47 existing integration preferences, 1,756 entity preferences, 108 device preferences, 27 automation enablements, three dashboards, six configuration hashes and three prior add-on states/versions were preserved. Core was not restarted. No notification automation was changed and no physical control was tested.
+
+Repository checks: 110 offline tests and focused Python lint pass. Fresh amd64 and ARM64 images build and pass version, callback, error-lookup and cleanup checks with networking disabled. These development checks do not establish completed GitHub CI or physical-device acceptance; installation is verified separately by the native pilot above.
 
 The deployment review corrected two preparation gaps: MQTT service discovery is optional for external brokers, and the native smoke script explicitly starts callback registration before reporting success. Earlier smoke results proved loading/version/error lookup/cleanup only; the separate supervised ring test did exercise actual callbacks.
 
@@ -42,11 +46,13 @@ Outdoor polling stayed idle during the call. Use the outdoor event for notificat
 
 ## Remaining Acceptance
 
-1. Separately authorize installation, then verify Supervisor build/start and MQTT discovery on the actual HA host.
-2. Verify the outdoor event reaches a real HA notification and normal answered-call state/audio works.
-3. Exercise broker/device outage recovery without replaying events or stale commands.
-4. Separately authorize physical Unlock and Stop ringing tests with someone present at the door.
+1. Verify a real outdoor ring reaches the HA event and an intended phone notification; no notification automation was changed by deployment. Also verify normal answered-call state/audio.
+2. Exercise broker/device outage recovery without replaying events or stale commands.
+3. Separately authorize physical Unlock and Stop ringing tests with someone present at the door.
+4. Choose permanent boot/watchdog settings after pilot acceptance; current startup remains manual.
 5. Resolve remaining release licensing and SDK maintenance gaps described below.
+
+The pilot reuses the existing LAN-only anonymous MQTT policy. It adds no public port, but any client able to publish to that broker can issue the door-control commands. Connection epochs prevent stale replay, not unauthorized publishers; topic authentication/ACLs are a separate hardening decision.
 
 ## Attribution And Distribution
 
