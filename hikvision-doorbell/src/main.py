@@ -121,7 +121,7 @@ def main():
     bridge = MQTTBridge(config.mqtt, devices, inbox)
     try:
         setupSDK(sdk)
-        events = EventManager(sdk, alarms)
+        events = EventManager(sdk, alarms, devices)
         events.start()
         bridge.start()
         while not stopping.is_set():

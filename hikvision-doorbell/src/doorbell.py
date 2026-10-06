@@ -1,5 +1,6 @@
 import json
 import re
+from datetime import datetime
 from ctypes import byref, c_byte, c_char_p, cast, sizeof
 from xml.etree import ElementTree
 
@@ -14,6 +15,7 @@ class Doorbell:
         self.sdk = sdk
         self.user_id = -1
         self.alarm_handle = -1
+        self.alarm_since = None
         self.serial = ""
         self.sdk_serial = ""
         self.connected_at = 0.0
@@ -60,18 +62,24 @@ class Doorbell:
         self.firmware = info.findtext("{*}firmwareVersion", "")
 
     def setup_alarm(self):
+        clock = ElementTree.fromstring(self._call_isapi("GET", "/ISAPI/System/time"))
+        local_time = clock.findtext("{*}localTime")
+        if not local_time:
+            raise ValueError("Device clock is required to reject replayed alarms")
+        self.alarm_since = datetime.fromisoformat(local_time.replace("Z", "+00:00")).replace(tzinfo=None, microsecond=0)
         alarm = NET_DVR_SETUPALARM_PARAM_V50()
         alarm.dwSize = sizeof(alarm)
         alarm.byLevel = 1
         alarm.byAlarmInfoType = 1
         alarm.byDeployType = 1
-        self.alarm_handle = self.sdk.NET_DVR_SetupAlarmChan_V50(self.user_id, alarm, None, 0)
+        self.alarm_handle = self.sdk.NET_DVR_SetupAlarmChan_V50(self.user_id, byref(alarm), None, 0)
         if self.alarm_handle < 0:
             raise SDKError(self.sdk, "Event subscription failed")
 
     def logout(self):
         self.online = False
         self.state = "unknown"
+        self.alarm_since = None
         self.generation += 1
         failures = []
         for attribute, close in (

@@ -1,4 +1,6 @@
 import json
+from datetime import datetime
+from ctypes import POINTER, cast, sizeof
 from unittest.mock import Mock
 
 import pytest
@@ -6,6 +8,7 @@ import pytest
 from config import AppConfig
 from doorbell import Doorbell
 from sdk.utils import SDKError
+from sdk.hcnetsdk import NET_DVR_SETUPALARM_PARAM_V50
 
 
 @pytest.fixture
@@ -32,6 +35,31 @@ def test_stop_ringing_rejects(device, mocker):
     request = mocker.patch.object(device, "_call_isapi")
     assert device.stop_ringing("ringing") is True
     assert json.loads(request.call_args.args[2]) == {"CallSignal": {"cmdType": "reject"}}
+
+
+def test_subscription_sends_realtime_options_by_pointer(device, mocker):
+    device.sdk.NET_DVR_SetupAlarmChan_V50.return_value = 9
+    mocker.patch.object(device, "_call_isapi", return_value='<Time><localTime>2026-10-06T12:00:00+02:00</localTime></Time>')
+
+    def subscribe(user_id, options_pointer, subscription, length):
+        options = cast(options_pointer, POINTER(NET_DVR_SETUPALARM_PARAM_V50)).contents
+        assert user_id == 7
+        assert options.dwSize == sizeof(NET_DVR_SETUPALARM_PARAM_V50)
+        assert options.byDeployType == 1
+        assert subscription is None and length == 0
+        return 9
+
+    device.sdk.NET_DVR_SetupAlarmChan_V50.side_effect = subscribe
+    device.setup_alarm()
+    assert device.alarm_handle == 9
+    assert device.alarm_since == datetime(2026, 10, 6, 12)
+
+
+def test_subscription_requires_device_clock(device, mocker):
+    mocker.patch.object(device, "_call_isapi", return_value='<Time/>')
+    with pytest.raises(ValueError, match="clock"):
+        device.setup_alarm()
+    device.sdk.NET_DVR_SetupAlarmChan_V50.assert_not_called()
 
 
 @pytest.mark.parametrize("error_code", [23, 10])

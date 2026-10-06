@@ -1,4 +1,5 @@
 from ctypes import cast, pointer, sizeof
+from datetime import datetime
 from queue import Queue
 from time import monotonic
 from unittest.mock import Mock
@@ -195,7 +196,8 @@ def test_event_received_during_poll_keeps_newer_state(device, mocker):
 
 def test_callback_copies_values_before_vendor_buffer_reused(device):
     inbox = Queue()
-    manager = EventManager(Mock(), inbox)
+    device.alarm_since = datetime(2026, 10, 6, 12)
+    manager = EventManager(Mock(), inbox, [device])
     source = NET_DVR_ALARMER()
     source.byUserIDValid = 1
     source.lUserID = 7
@@ -203,6 +205,10 @@ def test_callback_copies_values_before_vendor_buffer_reused(device):
         source.sSerialNumber[index] = value
     alarm = NET_DVR_VIDEO_INTERCOM_ALARM()
     alarm.byAlarmType = 17
+    alarm.struTime.wYear = 2026
+    alarm.struTime.byMonth = 10
+    alarm.struTime.byDay = 6
+    alarm.struTime.byHour = 12
     alarm_pointer = cast(pointer(alarm), POINTER(MessageCallbackAlarmInfoUnion))
     assert manager.receive(COMM_ALARM_VIDEO_INTERCOM, pointer(source), alarm_pointer, sizeof(alarm), None)
     source.lUserID = 99
@@ -213,10 +219,31 @@ def test_callback_copies_values_before_vendor_buffer_reused(device):
 
 def test_callback_rejects_truncated_buffers():
     inbox = Queue()
-    manager = EventManager(Mock(), inbox)
+    manager = EventManager(Mock(), inbox, [])
     manager.receive(COMM_ALARM_VIDEO_INTERCOM, pointer(NET_DVR_ALARMER()),
                     cast(pointer(NET_DVR_VIDEO_INTERCOM_ALARM()), POINTER(MessageCallbackAlarmInfoUnion)), 1, None)
     assert inbox.empty()
+
+
+@pytest.mark.parametrize("day,expected", [(2, False), (6, True), (0, False)])
+def test_callback_filters_historical_and_invalid_timestamps(device, day, expected):
+    inbox = Queue()
+    device.alarm_since = datetime(2026, 10, 6, 12)
+    manager = EventManager(Mock(), inbox, [device])
+    source = NET_DVR_ALARMER()
+    source.byUserIDValid = 1
+    source.lUserID = 7
+    for index, value in enumerate(b"sdkserial"):
+        source.sSerialNumber[index] = value
+    alarm = NET_DVR_VIDEO_INTERCOM_ALARM()
+    alarm.byAlarmType = 17
+    alarm.struTime.wYear = 2026
+    alarm.struTime.byMonth = 10
+    alarm.struTime.byDay = day
+    alarm.struTime.byHour = 12
+    manager.receive(COMM_ALARM_VIDEO_INTERCOM, pointer(source),
+                    cast(pointer(alarm), POINTER(MessageCallbackAlarmInfoUnion)), sizeof(alarm), None)
+    assert (not inbox.empty()) is expected
 
 
 def test_unsupported_poll_does_not_supersede_queued_sdk_event(device, mocker):

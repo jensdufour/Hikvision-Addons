@@ -70,7 +70,7 @@ def setupFunctionTypes(lib: CDLL):
     lib.NET_DVR_SetDVRConfig.argtypes = [LONG, DWORD, DWORD, c_void_p, DWORD]
     lib.NET_DVR_GetErrorMsg.argtypes = [POINTER(c_long)]
     lib.NET_DVR_SetDVRMessageCallBack_V50.argtypes = [c_int, fMessageCallBack, c_void_p]
-    lib.NET_DVR_SetupAlarmChan_V50.argtypes = [LONG, NET_DVR_SETUPALARM_PARAM_V50, c_char_p, DWORD]
+    lib.NET_DVR_SetupAlarmChan_V50.argtypes = [LONG, POINTER(NET_DVR_SETUPALARM_PARAM_V50), c_char_p, DWORD]
     lib.NET_DVR_RemoteControl.argtypes = [LONG, DWORD, c_void_p, DWORD]
     lib.NET_DVR_STDXMLConfig.argtypes = [LONG, POINTER(NET_DVR_XML_CONFIG_INPUT), POINTER(NET_DVR_XML_CONFIG_OUTPUT)]
     lib.NET_DVR_GetDeviceAbility.argtypes = [LONG, DWORD, c_char_p, DWORD, c_char_p, DWORD]

@@ -5,7 +5,7 @@ import re
 BOOL = c_bool
 WORD = c_ushort
 DWORD = c_ulong if sizeof(c_ulong) == 4 else c_uint
-LONG = c_long
+LONG = c_int
 BYTE = c_byte
 SHORT = c_short
 char = c_char

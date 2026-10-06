@@ -1,4 +1,5 @@
 from ctypes import sizeof, string_at
+from datetime import datetime
 from queue import Full
 from time import monotonic
 
@@ -8,9 +9,10 @@ from sdk.utils import SDKError
 
 
 class EventManager:
-    def __init__(self, sdk, inbox):
+    def __init__(self, sdk, inbox, devices):
         self.sdk = sdk
         self.inbox = inbox
+        self.devices = devices
         self.callback = fMessageCallBack(self.receive)
 
     def start(self):
@@ -31,6 +33,15 @@ class EventManager:
             state = {17: "ringing", 18: "idle"}.get(alarm.byAlarmType)
             if state:
                 serial = bytes(device.sSerialNumber).split(b"\0", 1)[0].decode("ascii")
+                owner = next((item for item in self.devices if item.user_id == device.lUserID
+                              and item.sdk_serial == serial), None)
+                if owner is None or owner.alarm_since is None:
+                    return True
+                stamp = alarm.struTime
+                occurred = datetime(stamp.wYear, stamp.byMonth, stamp.byDay, stamp.byHour, stamp.byMinute, stamp.bySecond)
+                if occurred < owner.alarm_since:
+                    logger.debug("Ignoring replayed alarm from {}", owner.config.name)
+                    return True
                 self.inbox.put_nowait(("alarm", int(device.lUserID), serial, state, monotonic()))
         except (Full, UnicodeError, ValueError):
             logger.warning("Discarded an invalid or overflowing SDK event")
