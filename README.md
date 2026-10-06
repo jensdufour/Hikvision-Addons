@@ -28,6 +28,8 @@ SDK alarms use a separate bounded queue from commands. Pending alarms are handle
 
 The callback header uses a signed 32-bit user ID on both architectures; Linux's 64-bit `long` shifts the serial field and breaks device matching. Subscription options are passed by pointer. The tested outdoor firmware uploads historical alarms even when realtime mode is requested. Each subscription therefore reads the device-local clock and rejects invalid timestamps and alarms older than that session before updating state or notifications. If the clock moves behind that baseline, reconnect after correcting the clock rather than weakening the guard.
 
+Native error-message lookup also uses a pointer to the SDK's 32-bit `LONG`, as declared in the official header, rather than the host's `long`. The binding is checked against both existing SDK architectures and the isolated Linux64 6.1.9.48 candidate.
+
 Cleanup checks both native close results and clears a handle only after success. Failed handles remain tracked, are reported as cleanup errors, and block a new login until cleanup succeeds. The device stays unavailable while the normal 30-second recovery cycle retries cleanup; other devices continue running. Shutdown still attempts MQTT and SDK cleanup even if a device close fails. Clearing a Python field alone is not evidence of successful native cleanup.
 
 ## Configuration And Migration

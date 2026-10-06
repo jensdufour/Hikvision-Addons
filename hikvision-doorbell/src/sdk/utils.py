@@ -1,5 +1,5 @@
 
-from ctypes import CDLL, POINTER, addressof, create_string_buffer, c_char, c_char_p, c_int, c_long, c_void_p, cast, cdll, sizeof
+from ctypes import CDLL, POINTER, addressof, create_string_buffer, c_char, c_char_p, c_int, c_void_p, cast, cdll, sizeof
 from ctypes.wintypes import LPVOID
 from enum import IntEnum
 import os
@@ -68,7 +68,7 @@ def setupFunctionTypes(lib: CDLL):
     lib.NET_DVR_Logout_V30.argtypes = [c_int]
     lib.NET_DVR_CloseAlarmChan_V30.argtypes = [LONG]
     lib.NET_DVR_SetDVRConfig.argtypes = [LONG, DWORD, DWORD, c_void_p, DWORD]
-    lib.NET_DVR_GetErrorMsg.argtypes = [POINTER(c_long)]
+    lib.NET_DVR_GetErrorMsg.argtypes = [POINTER(LONG)]
     lib.NET_DVR_SetDVRMessageCallBack_V50.argtypes = [c_int, fMessageCallBack, c_void_p]
     lib.NET_DVR_SetupAlarmChan_V50.argtypes = [LONG, POINTER(NET_DVR_SETUPALARM_PARAM_V50), c_char_p, DWORD]
     lib.NET_DVR_RemoteControl.argtypes = [LONG, DWORD, c_void_p, DWORD]
@@ -188,7 +188,7 @@ class SDKError(RuntimeError):
         """
         super().__init__(*args)
         error_code = sdk.NET_DVR_GetLastError()
-        error_message: str = sdk.NET_DVR_GetErrorMsg(c_long(error_code)).decode('utf-8', errors='replace')
+        error_message: str = sdk.NET_DVR_GetErrorMsg(LONG(error_code)).decode('utf-8', errors='replace')
         
         # Prepend the three parameters to the rest of the tuple in args
         self.args = (user_message, error_code, error_message, *self.args)

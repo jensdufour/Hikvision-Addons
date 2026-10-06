@@ -2,7 +2,7 @@ from ctypes import POINTER, c_char_p, cast, sizeof
 from struct import pack_into
 from unittest.mock import Mock
 
-from sdk.utils import call_ISAPI, setupSDK, setupFunctionTypes
+from sdk.utils import SDKError, call_ISAPI, setupSDK, setupFunctionTypes
 from sdk.hcnetsdk import LONG, NET_DVR_ALARMER, NET_DVR_SETUPALARM_PARAM_V50
 
 
@@ -24,6 +24,19 @@ def test_subscription_signature_takes_a_pointer():
     sdk = Mock()
     setupFunctionTypes(sdk)
     assert sdk.NET_DVR_SetupAlarmChan_V50.argtypes[1] == POINTER(NET_DVR_SETUPALARM_PARAM_V50)
+
+
+def test_error_message_uses_sdk_long_width():
+    sdk = Mock()
+    setupFunctionTypes(sdk)
+    assert sdk.NET_DVR_GetErrorMsg.argtypes == [POINTER(LONG)]
+    sdk.NET_DVR_GetLastError.return_value = 23
+    sdk.NET_DVR_GetErrorMsg.return_value = b"unsupported"
+    error = SDKError(sdk, "read failed")
+    value = sdk.NET_DVR_GetErrorMsg.call_args.args[0]
+    assert sizeof(value) == 4
+    assert value.value == 23
+    assert error.args == ("read failed", 23, "unsupported")
 
 
 def test_isapi_request_length_timeout_and_buffer_lifetime():
