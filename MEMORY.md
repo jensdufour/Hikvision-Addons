@@ -1,5 +1,7 @@
 # Hikvision Doorbell Lite Decisions
 
+- 2026-10-06 follow-up: user authorized focused source commits/push and read-only firmware compatibility checks. User explicitly confirmed that the indoor station uses the existing outdoor credentials. Both actual Linux SDK login/identity/call-status paths pass: outdoor DS-KV6113-WPE1(B) V2.2.53 build 220816; indoor DS-KH6320-WTE1 V2.2.2 build 221129. Both advertise `idle,ring,onCall` and `reject`; outdoor advertises exactly one relay. Fix the verified `ring` -> `ringing` parser mismatch; never reinterpret unknown states as idle. Control and event-subscription functions were blocked in probes. No deployment, MQTT publishing, ringing, unlock, reject, setting change or reboot occurred. Physical ring delivery/control effects and recovery remain separate acceptance gates.
+
 - 2026-10-06: offline-only implementation authorized for DS-KV6113-WPE1(B) and DS-KH6320-WTE1. Keep ring events, call state, outdoor unlock, availability/recovery and Stop ringing. No deployment, real device commands, HA changes, or Frigate changes authorized.
 - Based on upstream `8f8b97c6b5731e9979eee28d011db6b860b826e1`. Original source remains in Git and upstream. Do not silently synchronize from upstream over the reduced implementation.
 - One Paho client and native HA MQTT discovery; no entity framework, stdin command path, audio/video or scene/alarm functions. One validated JSON config, with optional Supervisor MQTT lookup. Runtime direct dependencies: Paho, Pydantic, Loguru.

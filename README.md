@@ -2,7 +2,7 @@
 
 An unreleased, reduced fork of [pergolafabio/Hikvision-Addons](https://github.com/pergolafabio/Hikvision-Addons), based on `8f8b97c6b5731e9979eee28d011db6b860b826e1`.
 
-Targets **DS-KV6113-WPE1(B)** outdoor stations and **DS-KH6320-WTE1** indoor stations only. Firmware-specific operation has not been verified on physical devices. No image is published by this fork's CI.
+Targets **DS-KV6113-WPE1(B)** outdoor stations and **DS-KH6320-WTE1** indoor stations only. Read-only SDK identity, call-status and capability checks have passed on both physical devices; ring delivery and physical control effects remain unverified. No image is published by this fork's CI.
 
 ## Scope
 
@@ -42,9 +42,22 @@ flake8 src tests --select=E9,F63,F7,F82 --show-source
 
 Every test blocks network connections and vendor-library loading. Separate Docker smoke tests load the SDK with `--network none`; they are not doorbell acceptance tests. CI checks amd64 and aarch64 without publishing images or using device credentials.
 
+## Read-Only Firmware Checks
+
+Verified on 2026-10-06 using the fork's Linux SDK login and GET path, with control and event-subscription functions explicitly blocked:
+
+| Model | Firmware | Verified read-only behavior |
+| --- | --- | --- |
+| DS-KV6113-WPE1(B) | V2.2.53 build 220816 | Exact identity accepted, call state reads idle, one door relay advertised, reject advertised |
+| DS-KH6320-WTE1 | V2.2.2 build 221129 | Exact identity accepted, call state reads idle, reject advertised |
+
+Both firmwares advertise call states `idle`, `ring`, and `onCall`. The parser now normalizes `ring` to `ringing`, with regressions for both models and the Stop ringing path. Previously it produced `unknown`, preventing rejection of a ringing call.
+
+No ring was injected, no event subscription was opened, no MQTT state was published and no unlock/reject command was sent. Advertised support is not proof of the physical command effect. Device credentials, addresses, serials and raw private exports are not included in these findings.
+
 ## Before A Device Pilot
 
-Confirm firmware versions and the exact model strings returned by `/ISAPI/System/deviceInfo`. A device reporting the KV6113 model without the `(B)` revision suffix is deliberately rejected until that identity can be verified; do not weaken the guard by guessing.
+The checked devices return the exact configured model strings, including `(B)` outdoors. Recheck after firmware updates or replacement. A device reporting the KV6113 model without that revision suffix remains deliberately rejected; no speculative model alias was added.
 
 Then separately authorize a reversible deployment and observe real ring, answer, dismissal, broker/device recovery and native indoor audio. Unlock and Stop ringing tests require separate explicit consent and someone at the door. Linux SDK loading alone does not prove firmware compatibility.
 

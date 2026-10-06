@@ -73,6 +73,19 @@ def test_stop_ringing_checks_current_state(device, mocker):
     stop.assert_called_once_with("oncall")
 
 
+@pytest.mark.parametrize("model", ["DS-KV6113-WPE1(B)", "DS-KH6320-WTE1"])
+def test_stop_ringing_accepts_advertised_ring_status(device, mocker, model):
+    device.config.model = model
+    request = mocker.patch.object(device, "_call_isapi", side_effect=['{"CallStatus":{"status":"ring"}}', '{}'])
+    handle_message(("command", device, "stop_ringing", "current", device.generation, monotonic()),
+                   [device], Mock(connected=True, epoch="current"))
+    assert request.call_count == 2
+    assert request.call_args_list[0].args == ("GET", "/ISAPI/VideoIntercom/callStatus?format=json")
+    assert request.call_args_list[1].args == (
+        "PUT", "/ISAPI/VideoIntercom/callSignal?format=json", '{"CallSignal": {"cmdType": "reject"}}')
+    device.sdk.NET_DVR_SetDVRConfig.assert_not_called()
+
+
 def test_device_recovery_closes_failed_session(device, mocker):
     device.online = False
     mocker.patch.object(device, "authenticate")

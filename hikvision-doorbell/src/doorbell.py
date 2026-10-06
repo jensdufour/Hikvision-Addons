@@ -97,7 +97,7 @@ class Doorbell:
             self.poll_supported = False
             return "unknown"
         state = response.get("CallStatus", {}).get("status", "")
-        return {"idle": "idle", "ringing": "ringing", "onCall": "oncall", "oncall": "oncall"}.get(state, "unknown")
+        return {"idle": "idle", "ring": "ringing", "ringing": "ringing", "onCall": "oncall", "oncall": "oncall"}.get(state, "unknown")
 
     def unlock_door(self):
         if not self.online or not self.outdoor:

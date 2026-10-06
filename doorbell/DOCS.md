@@ -2,7 +2,7 @@
 
 ## Status
 
-This fork is an offline-tested prototype, not a hardware-verified release. The manifest is experimental, manual-start, and points to the fork's own image namespace. CI never publishes that image.
+This fork is an offline-tested prototype with successful read-only SDK checks on both target devices, not a fully hardware-verified release. The [firmware results](../README.md#read-only-firmware-checks) record exact versions and limits. The manifest is experimental, manual-start, and points to the fork's own image namespace. CI never publishes that image.
 
 ## Options
 
@@ -23,7 +23,7 @@ The standalone [JSON example](../hikvision-doorbell/default_config.json) uses do
 
 Availability combines broker/bridge connectivity and that device's health. The indoor station does not emit a second ring notification. Use the outdoor event entity's `ring` event in a Home Assistant automation; add Frigate imagery there if desired. SDK events and polling for the same ringing episode are deduplicated. Events are not retained or replayed when the broker returns.
 
-Call states are `idle`, `ringing`, `oncall`, and `unknown`. Offline entities become unavailable. No timer pretends that a call has ended. When status polling is unsupported, SDK events remain usable and stale state becomes `unknown` after 120 seconds. Stop ringing intentionally does nothing if current ringing cannot be confirmed.
+Call states are `idle`, `ringing`, `oncall`, and `unknown`. Both checked firmwares advertise `ring`, which is normalized to `ringing`. Offline entities become unavailable. No timer pretends that a call has ended. When status polling is unsupported, SDK events remain usable and stale state becomes `unknown` after 120 seconds. Stop ringing intentionally does nothing if current ringing cannot be confirmed.
 
 Unlock controls the outdoor station's first relay through the existing SDK command, with ISAPI fallback only on error 23. It does not expose an indoor duplicate unlock control. Stop ringing rejects a current incoming call; it does not hang up an established conversation.
 

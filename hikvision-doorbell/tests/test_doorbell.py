@@ -100,8 +100,10 @@ def test_identity_refuses_replacement_device(device, mocker):
         device.check_identity()
 
 
-@pytest.mark.parametrize("reported,expected", [("idle", "idle"), ("ringing", "ringing"), ("onCall", "oncall"), ("unexpected", "unknown")])
-def test_call_state(device, mocker, reported, expected):
+@pytest.mark.parametrize("model", ["DS-KV6113-WPE1(B)", "DS-KH6320-WTE1"])
+@pytest.mark.parametrize("reported,expected", [("idle", "idle"), ("ring", "ringing"), ("ringing", "ringing"), ("onCall", "oncall"), ("unexpected", "unknown")])
+def test_call_state(device, mocker, model, reported, expected):
+    device.config.model = model
     mocker.patch.object(device, "_call_isapi", return_value=json.dumps({"CallStatus": {"status": reported}}))
     assert device.get_call_state() == expected
 
