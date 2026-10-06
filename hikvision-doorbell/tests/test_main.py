@@ -107,6 +107,52 @@ def test_old_event_cannot_override_newer_poll(device):
     assert device.state == "oncall"
 
 
+@pytest.mark.parametrize("polled_state", ["idle", "oncall", "ringing"])
+def test_queued_ring_delivered_before_newer_poll(device, mocker, polled_state):
+    alarms = Queue()
+    alarms.put(("alarm", 7, "sdkserial", "ringing", 19))
+    alarms.put(("alarm", 7, "sdkserial", "ringing", 19.5))
+    mocker.patch("main.monotonic", return_value=20)
+    mocker.patch.object(device, "check_identity")
+    mocker.patch.object(device, "get_call_state", return_value=polled_state)
+    bridge = Mock()
+    check_device(device, [device], bridge, 5, alarms)
+    bridge.ring.assert_called_once_with(device)
+    assert device.state == polled_state
+    assert device.last_state_at == 20
+    assert alarms.empty()
+
+
+def test_queued_ring_episodes_each_delivered_before_poll(device, mocker):
+    alarms = Queue()
+    for state, observed in [("ringing", 17), ("idle", 18), ("ringing", 19)]:
+        alarms.put(("alarm", 7, "sdkserial", state, observed))
+    mocker.patch("main.monotonic", return_value=20)
+    mocker.patch.object(device, "check_identity")
+    mocker.patch.object(device, "get_call_state", return_value="idle")
+    bridge = Mock()
+    check_device(device, [device], bridge, 5, alarms)
+    assert bridge.ring.call_count == 2
+    assert device.state == "idle"
+
+
+def test_event_received_during_poll_keeps_newer_state(device, mocker):
+    alarms = Queue()
+
+    def poll_state():
+        alarms.put(("alarm", 7, "sdkserial", "ringing", 21))
+        return "idle"
+
+    mocker.patch("main.monotonic", return_value=20)
+    mocker.patch.object(device, "check_identity")
+    mocker.patch.object(device, "get_call_state", side_effect=poll_state)
+    bridge = Mock()
+    check_device(device, [device], bridge, 5, alarms)
+    bridge.ring.assert_called_once_with(device)
+    assert device.state == "ringing"
+    assert device.last_state_at == 21
+
+
 def test_callback_copies_values_before_vendor_buffer_reused(device):
     inbox = Queue()
     manager = EventManager(Mock(), inbox)
@@ -157,7 +203,7 @@ def test_shutdown_drops_waiting_command(device, mocker):
     inbox.get.side_effect = stop_during_read
     device.next_check = float("inf")
     mocker.patch("main.Event", return_value=stopping)
-    mocker.patch("main.Queue", return_value=inbox)
+    mocker.patch("main.Queue", side_effect=[inbox, Queue()])
     mocker.patch("main.signal.signal")
     mocker.patch("main.load_config", return_value=AppConfig(doorbells=[device.config], mqtt={"host": "localhost"}))
     mocker.patch("main.loadSDK", return_value=Mock())

@@ -28,7 +28,15 @@ def report_state(device, state, bridge, initial=False, observed=None):
     bridge.publish_state(device)
 
 
-def check_device(device, devices, bridge, poll_seconds):
+def drain_alarms(alarms, devices, bridge):
+    for _ in range(alarms.qsize()):
+        try:
+            handle_message(alarms.get_nowait(), devices, bridge)
+        except Empty:
+            break
+
+
+def check_device(device, devices, bridge, poll_seconds, alarms=None):
     initial = not device.online
     observed = monotonic()
     try:
@@ -50,6 +58,8 @@ def check_device(device, devices, bridge, poll_seconds):
                 observed = device.last_state_at
                 if monotonic() - device.last_event < 120:
                     state = device.state
+        if alarms is not None:
+            drain_alarms(alarms, devices, bridge)
         report_state(device, state, bridge, initial=initial, observed=observed)
         device.next_check = monotonic() + poll_seconds
     except Exception as error:
@@ -99,22 +109,24 @@ def main():
     for signum in (signal.SIGINT, signal.SIGTERM):
         signal.signal(signum, lambda *_: stopping.set())
     inbox = Queue(maxsize=128)
+    alarms = Queue(maxsize=128)
     sdk = loadSDK()
     devices = [Doorbell(options, sdk) for options in config.doorbells]
     bridge = MQTTBridge(config.mqtt, devices, inbox)
     try:
         setupSDK(sdk)
-        events = EventManager(sdk, inbox)
+        events = EventManager(sdk, alarms)
         events.start()
         bridge.start()
         while not stopping.is_set():
+            drain_alarms(alarms, devices, bridge)
             if bridge.refresh_needed:
                 bridge.refresh()
             for device in devices:
                 if stopping.is_set():
                     break
                 if monotonic() >= device.next_check:
-                    check_device(device, devices, bridge, config.system.poll_seconds)
+                    check_device(device, devices, bridge, config.system.poll_seconds, alarms)
             try:
                 message = inbox.get(timeout=0.2)
                 if not stopping.is_set():

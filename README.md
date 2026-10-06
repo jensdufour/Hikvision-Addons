@@ -24,6 +24,8 @@ Unlock is never a retained switch state. MQTT command topics change on each brok
 
 State polling defaults to five seconds because the existing SDK event path does not establish every call transition. Unsupported polling falls back to events; stale event-only state becomes `unknown`, not a guessed `idle`. Stop ringing is a no-op if a fresh status query cannot confirm ringing.
 
+SDK alarms use a separate bounded queue from commands. Pending alarms are handled before publishing a newer poll snapshot, so a short ring is not erased by a later idle/on-call sample. Repeated ringing reports remain deduplicated, and an event newer than the poll still owns the displayed state.
+
 ## Configuration And Migration
 
 See [add-on documentation](doorbell/DOCS.md) and [standalone Docker instructions](docs/docker.md).
