@@ -1,0 +1,15 @@
+*
+!requirements.txt
+!src/
+!src/**
+!lib-amd64/
+!lib-amd64/**
+!lib-aarch64/
+!lib-aarch64/**
+!licenses/
+!licenses/**
+**/__pycache__
+**/*.py[cod]
+**/.env*
+**/options.json
+**/*.log

@@ -1,7 +1,6 @@
 name: Hikvision Doorbell Lite
 description: Ring events, call state, unlock and stop ringing for two Hikvision models
 version: '0.1.0-dev'
-image: ghcr.io/jensdufour/hikvision-doorbell-lite
 slug: hikvision_doorbell_lite
 url: https://github.com/jensdufour/Hikvision-Addons
 arch:

@@ -1,7 +1,0 @@
-options.json
-.env.local
-data/
-SDKLogs/
-__pycache__/
-.pytest_cache/
-*.next

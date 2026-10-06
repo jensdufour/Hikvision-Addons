@@ -2,7 +2,9 @@
 
 ## Status
 
-This fork is an offline-tested prototype with successful read-only SDK checks on both target devices and a supervised local ring/dismiss test, not a fully hardware-verified release. The [firmware results](../README.md#read-only-firmware-checks) and [supervised test](../README.md#supervised-ring-test) record exact limits. The manifest is experimental, manual-start, and points to the fork's own image namespace. CI never publishes that image.
+This fork has offline tests, successful read-only SDK checks on both target devices and a supervised local ring/dismiss test, not full hardware acceptance. The [verified state](../README.md#verified-state) and [SDK record](SDK.md) describe exact limits. The manifest is experimental and manual-start. Supervisor builds from this directory; no prebuilt image is required or published by CI.
+
+Installation remains a separately authorized pilot. Add `https://github.com/jensdufour/Hikvision-Addons` as an add-on repository, select Hikvision Doorbell Lite and let Supervisor build it. Enter the two device configurations and MQTT settings before starting; the blank default addresses/passwords intentionally fail validation. Do not start the upstream bridge concurrently.
 
 ## Options
 
@@ -12,7 +14,7 @@ Configure each device with `name`, `model`, literal `ip`, `username`, `password`
 
 `mqtt: {}` requests the Supervisor MQTT service. A manual broker uses `host`, optional `port` (default 1883), `ssl`, `username` and `password`. Set both `ssl: true` and the broker's TLS port when needed; TLS uses normal certificate and hostname verification. An invalid manual configuration fails instead of silently switching brokers.
 
-The standalone [JSON example](../hikvision-doorbell/default_config.json) uses documentation-only IP addresses, not real device details. Home Assistant supplies `/data/options.json`; `CONFIG_FILE_PATH` can select another JSON file outside Supervisor. The previous dotenv, YAML, `DOORBELLS` and nested environment-variable loaders are not supported.
+The [test configuration example](default_config.json) uses documentation-only IP addresses, not real device details. Home Assistant supplies `/data/options.json`; `CONFIG_FILE_PATH` is available for isolated development checks only. The previous dotenv, YAML, `DOORBELLS` and nested environment-variable loaders are not supported.
 
 ## Entities
 
@@ -26,6 +28,10 @@ Availability combines broker/bridge connectivity and that device's health. The i
 Call states are `idle`, `ringing`, `oncall`, and `unknown`. Both checked firmwares advertise `ring`, which is normalized to `ringing`. Offline entities become unavailable. No timer pretends that a call has ended. When status polling is unsupported, SDK events remain usable and stale state becomes `unknown` after 120 seconds. Stop ringing intentionally does nothing if current ringing cannot be confirmed.
 
 The supervised press showed that outdoor polling can remain idle while the indoor station is ringing. Use the indoor Call state and Stop ringing control for call progress; use the outdoor Doorbell event for notifications. Actual rejection and answered-call behavior still need separate testing. Historical SDK records are filtered using the device clock captured at subscription, not interpreted as new presses.
+
+Outdoor polls cannot emit ring events or reset notification deduplication. A current SDK dismissal re-arms the next episode; older SDK events cannot rewind it. A missed dismissal may suppress later notifications until a valid dismissal or new session. Startup suppresses replay, and no arbitrary timeout invents a new press. A clock moving behind the subscription baseline also requires correction and reconnection.
+
+Controls require verified model/serial and a current connection. Command topics rotate with broker/device sessions, retained commands are rejected, and queued commands expire after three seconds. Ambiguous failures are not retried. Failed native cleanup remains tracked and blocks a replacement login while the device stays unavailable.
 
 Unlock controls the outdoor station's first relay through the existing SDK command, with ISAPI fallback only on error 23. It does not expose an indoor duplicate unlock control. Stop ringing rejects a current incoming call; it does not hang up an established conversation.
 

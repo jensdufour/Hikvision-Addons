@@ -15,8 +15,10 @@ jobs:
         include:
           - runner: ubuntu-24.04
             arch: amd64
+            sdk: 6.1.9.48
           - runner: ubuntu-24.04-arm
             arch: aarch64
+            sdk: 6.1.8.101
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -25,16 +27,17 @@ jobs:
           python-version: '3.10'
       - name: Install development dependencies
         run: pip install -r requirements-dev.txt
-        working-directory: hikvision-doorbell
+        working-directory: doorbell
       - name: Offline tests
         run: pytest -q
-        working-directory: hikvision-doorbell
+        working-directory: doorbell
       - name: Check Python errors
         run: flake8 src tests --select=E9,F63,F7,F82 --show-source
-        working-directory: hikvision-doorbell
+        working-directory: doorbell
       - name: Build local image
-        run: docker build --build-arg BUILD_ARCH=${{ matrix.arch }} -t hikvision-doorbell-lite:test hikvision-doorbell
+        run: docker build --build-arg BUILD_ARCH=${{ matrix.arch }} -t hikvision-doorbell-lite:test doorbell
       - name: Load SDK with no network
         run: >-
-          docker run --rm --network none hikvision-doorbell-lite:test -c
-          "from sdk.utils import loadSDK, setupSDK, shutdownSDK; sdk = loadSDK(); setupSDK(sdk); shutdownSDK(sdk)"
+          docker run --rm --network none
+          --mount type=bind,src="${{ github.workspace }}/doorbell/tests/smoke_sdk.py",dst=/smoke_sdk.py,readonly
+          hikvision-doorbell-lite:test /smoke_sdk.py ${{ matrix.sdk }}
