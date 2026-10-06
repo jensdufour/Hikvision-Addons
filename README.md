@@ -85,7 +85,7 @@ Next separately authorize a reversible deployment and validate actual MQTT/HA no
 
 ## SDK Upgrade Rehearsal
 
-The user-downloaded official Linux64 **6.1.9.48 build20230410** bundle passed an isolated startup check and read-only identity, idle-state, capability, passive-subscription and cleanup checks on both target devices. It is staged outside Git, not installed or published. The bundled amd64 **6.1.6.45** and ARM64 **6.1.8.101** remain unchanged. See [versions, archive hash, dependency caveats and promotion gates](hikvision-doorbell/sdkversions.md). The newer 6.1.11.30 packages have not been acquired, and the candidate's supervised ring, MQTT and recovery acceptance remain pending.
+The user-downloaded official Linux64 **6.1.9.48 build20230410** bundle passed isolated startup and read-only device checks, followed by a separate local ring/dismiss observation using the deduplication fix. The candidate produced one notification intent, ignored historical callbacks, and passed native cleanup; temporary indoor mute was restored with exact readback. No MQTT or physical call-control commands were used. Actual acoustic silence was not separately user-confirmed in the candidate run. It remains staged outside Git, not installed or published; bundled amd64 **6.1.6.45** and ARM64 **6.1.8.101** are unchanged. See [candidate evidence and promotion gates](hikvision-doorbell/sdkversions.md#candidate-ring-observation---2026-10-06). The newer 6.1.11.30 packages have not been acquired; MQTT, answered-call, control-effect and recovery acceptance remain pending.
 
 ## Attribution And Distribution
 

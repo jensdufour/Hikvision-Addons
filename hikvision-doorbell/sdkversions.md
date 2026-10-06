@@ -25,15 +25,26 @@ Versions were read with `NET_DVR_GetSDKBuildVersion` after initialization in net
 | DS-KV6113-WPE1(B) | V2.2.53 | Identity, idle call status, reject capability, one relay, passive subscription and checked close/logout passed |
 | DS-KH6320-WTE1 | V2.2.2 | Identity, idle call status, reject capability, passive subscription and checked close/logout passed |
 
-Probe restricted ISAPI to an explicit GET allowlist, blocked physical-control SDK calls, required idle before subscription, and closed sessions immediately. Zero control attempts, no MQTT client, no sound changes, no firmware changes and no deployment. A new supervised ring/replay cycle was not run with this candidate; the baseline's earlier ring result must not be attributed to 6.1.9.48.
+The initial probe restricted ISAPI to an explicit GET allowlist, blocked physical-control SDK calls, required idle before subscription, and closed sessions immediately. Zero control attempts, no MQTT client, no sound changes, no firmware changes and no deployment. Its read-only results do not establish ring delivery; the separate candidate observation below does. The baseline's earlier ring result must not be attributed to 6.1.9.48.
 
 The downloaded official header also exposed the remaining `NET_DVR_GetErrorMsg` host-long mismatch, fixed separately with a 32-bit SDK LONG regression. All 97 offline tests pass, as do focused flake8, diagnostics and isolated compatibility checks for the unchanged baseline SDKs.
+
+## Candidate Ring Observation - 2026-10-06
+
+After the user authorized the quiet test, a bounded local observer ran the complete candidate bundle with source commit `6297283` mounted read-only. The SDK version guard confirmed 6.1.9.48 before subscriptions opened. Unlock/reject/answer and non-GET ISAPI calls were blocked in the observer, and no MQTT client was created.
+
+- One fresh outdoor SDK ring and its dismissal decoded with matching identity, about 31 seconds apart. Exactly one local notification intent was recorded, and 17 historical callbacks were ignored.
+- Indoor call status changed to ringing and then idle. Outdoor polling continued to report idle during the call; it did not reset the event-owned ring latch. Acceptance required the decoded dismissal, idle readback, and an inactive ring latch.
+- Both device alarm-channel closes/logouts and native SDK cleanup returned success; the observer exited and its container was removed. Zero control attempts and no MQTT or phone notification.
+- A separate guarded helper backed up the current indoor audio XML, muted output 7 -> 0 while talk volume stayed 7, then restored output to 7 after idle with exact semantic readback. The mute was API-verified; actual acoustic silence and the manual press count were not separately confirmed by the user in this run.
+
+Private `ring-test/ring-observation.json` and `ring-test/restore-result.json` own this result. No runtime source changes were needed during the observation. This is not a test of answered calls, physical unlock/reject, broker/device outages, MQTT delivery or image deployment.
 
 ## Promotion Gate
 
 Keep this candidate staged, not promoted. The archive contains developer guides, a general update-history section and third-party license notices; no standalone 6.1.9.48 release note or blanket SDK redistribution permission was established. Clarify distribution terms before adding new proprietary binaries to the public fork or publishing an image.
 
-The outdoor-idle/deduplication gap was subsequently fixed offline by separating SDK notification episodes from polled display state, not by upgrading the SDK. After separate approval, repeat the quiet supervised ring test with controls disabled and verify one fresh notification intent plus SDK dismissal, then validate MQTT delivery and reconnect behavior. Keep replay protection; a missing SDK dismissal must not be replaced with a guessed idle transition. Unlock/reject effects remain separately authorized tests.
+The outdoor-idle/deduplication gap was fixed offline by separating SDK notification episodes from polled display state, not by upgrading the SDK. The candidate ring observation above now verifies one fresh notification intent plus SDK dismissal with that source. Next separately validate MQTT delivery and reconnect behavior. Keep replay protection; a missing SDK dismissal must not be replaced with a guessed idle transition. Unlock/reject effects remain separately authorized tests.
 
 The Chinese portal lists newer Linux64 and ArmLinux64 6.1.11.30 packages, but neither has been acquired. This Linux64 archive does not contain an ARM64 upgrade. Do not relabel it as the latest release or change the ARM baseline.
 
