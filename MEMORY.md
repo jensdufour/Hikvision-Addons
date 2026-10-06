@@ -2,6 +2,8 @@
 
 ## Scope And Ownership
 
+- 2026-10-06 pilot review: user authorized correcting optional MQTT discovery and the missing smoke-test callback start, rerunning checks, then deploying the add-on. This permits the passive installation/start only, not Unlock/Stop ringing, sound changes or physical-device tests. HA readback was healthy/supported amd64, Core2026.9.4/Supervisor2026.09.3, external MQTT192.168.0.30 loaded, no Hikvision add-on/Core integration and no Supervisor MQTT provider.
+- Review fixes: use `mqtt:want` rather than `mqtt:need`; manual broker options remain mandatory without a Supervisor provider. Smoke must call EventManager.start(); its earlier success label did not prove callback registration. Preserve the separate real ring-test evidence and run the corrected native check before deployment.
 - Sole production target: one Supervisor-managed HA add-on for DS-KV6113-WPE1(B) and DS-KH6320-WTE1. Reuse existing MQTT and Frigate; HA owns notifications. Local containers are test tools only.
 - User authorized refactoring, SDK inclusion and focused commits/pushes on 2026-10-06. No deployment, new device commands, firmware changes or sound changes are authorized by that cleanup request.
 - Runtime, tests, manifest, Dockerfile and both architecture bundles live in `doorbell/`. Supervisor builds locally; do not restore the unpublished image reference or a second standalone production path.

@@ -14,6 +14,8 @@ Configure each device with `name`, `model`, literal `ip`, `username`, `password`
 
 `mqtt: {}` requests the Supervisor MQTT service. A manual broker uses `host`, optional `port` (default 1883), `ssl`, `username` and `password`. Set both `ssl: true` and the broker's TLS port when needed; TLS uses normal certificate and hostname verification. An invalid manual configuration fails instead of silently switching brokers.
 
+Supervisor MQTT discovery is optional (`mqtt:want`), so an external broker does not require a second broker add-on. With an external broker, supply its manual settings; empty MQTT options still require an available Supervisor MQTT service and fail closed without one.
+
 The [test configuration example](default_config.json) uses documentation-only IP addresses, not real device details. Home Assistant supplies `/data/options.json`; `CONFIG_FILE_PATH` is available for isolated development checks only. The previous dotenv, YAML, `DOORBELLS` and nested environment-variable loaders are not supported.
 
 ## Entities

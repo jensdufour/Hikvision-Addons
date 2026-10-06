@@ -32,6 +32,8 @@ Standalone deployment files and stale upstream IDE/issue/funding metadata are re
 
 Repository checks: 110 offline tests and focused Python lint pass. Fresh amd64 and ARM64 images build and pass version, callback, error-lookup and cleanup checks with networking disabled. These are local results, not a claim of completed GitHub CI or HA installation.
 
+The deployment review corrected two preparation gaps: MQTT service discovery is optional for external brokers, and the native smoke script explicitly starts callback registration before reporting success. Earlier smoke results proved loading/version/error lookup/cleanup only; the separate supervised ring test did exercise actual callbacks.
+
 On 2026-10-06, read-only SDK checks passed for outdoor firmware **V2.2.53 build 220816** and indoor firmware **V2.2.2 build 221129**. Both devices report their exact supported model, advertise reject, and permit passive event subscription. The outdoor station advertises one relay.
 
 The now-bundled amd64 **6.1.9.48 build20230410** passed a supervised native ring/dismiss cycle: one local notification intent, 17 historical callbacks ignored, indoor ringing then idle, and successful session/SDK cleanup. Temporary indoor mute was restored with exact API readback, and the user confirmed quiet during the press. No MQTT publication or physical call-control command was part of that observation.

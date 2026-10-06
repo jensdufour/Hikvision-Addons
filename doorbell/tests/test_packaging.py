@@ -22,6 +22,7 @@ def test_manifest_is_experimental_and_has_no_extra_access():
     assert (APP / "Dockerfile").is_file()
     assert manifest["stage"] == "experimental"
     assert manifest["boot"] == "manual"
+    assert manifest["services"] == ["mqtt:want"]
     assert set(manifest["arch"]) == {"amd64", "aarch64"}
     assert not any(manifest.get(key) for key in ("stdin", "homeassistant_api", "full_access", "map", "host_network"))
     assert set(manifest["schema"]["doorbells"][0]) == set(AppConfig.Doorbell.model_fields)

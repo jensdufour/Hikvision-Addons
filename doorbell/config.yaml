@@ -11,7 +11,7 @@ startup: application
 boot: manual
 init: false
 services:
-  - mqtt:need
+  - mqtt:want
 options:
   doorbells:
     - name: Front door

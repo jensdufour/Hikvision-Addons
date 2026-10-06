@@ -18,6 +18,7 @@ if __name__ == "__main__":
         actual = ".".join(str((version >> shift) & 255) for shift in (24, 16, 8, 0))
         assert actual == expected, f"Expected SDK {expected}, got {actual}"
         events = EventManager(sdk, Queue(maxsize=1), [])
+        events.start()
         assert sdk.NET_DVR_GetErrorMsg(LONG(23)), "SDK error lookup failed"
         print(f"PASS: SDK {actual}, callback registration and error lookup")
     finally:
