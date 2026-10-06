@@ -38,6 +38,92 @@ def test_ring_episode_deduplication_and_no_initial_replay(device):
     assert bridge.ring.call_count == 2
 
 
+@pytest.mark.parametrize("polled_state", ["idle", "oncall", "unknown", "ringing"])
+def test_outdoor_poll_cannot_rearm_sdk_ring(device, mocker, polled_state):
+    bridge = Mock()
+    handle_message(("alarm", 7, "sdkserial", "ringing", 10), [device], bridge)
+    mocker.patch("main.monotonic", return_value=11)
+    mocker.patch.object(device, "check_identity")
+    mocker.patch.object(device, "get_call_state", return_value=polled_state)
+    check_device(device, [device], bridge, 5)
+    assert device.state == polled_state
+    handle_message(("alarm", 7, "sdkserial", "ringing", 12), [device], bridge)
+    bridge.ring.assert_called_once_with(device)
+    handle_message(("alarm", 7, "sdkserial", "idle", 13), [device], bridge)
+    handle_message(("alarm", 7, "sdkserial", "ringing", 14), [device], bridge)
+    assert bridge.ring.call_count == 2
+
+
+def test_outdoor_poll_alone_does_not_emit_press_event(device, mocker):
+    bridge = Mock()
+    mocker.patch.object(device, "check_identity")
+    mocker.patch.object(device, "get_call_state", return_value="ringing")
+    check_device(device, [device], bridge, 5)
+    assert device.state == "ringing"
+    bridge.ring.assert_not_called()
+
+
+def test_delayed_dismissal_rearms_without_rewinding_display(device, mocker):
+    bridge = Mock()
+    handle_message(("alarm", 7, "sdkserial", "ringing", 10), [device], bridge)
+    mocker.patch("main.monotonic", return_value=20)
+    mocker.patch.object(device, "check_identity")
+    mocker.patch.object(device, "get_call_state", return_value="oncall")
+    check_device(device, [device], bridge, 5)
+    handle_message(("alarm", 7, "sdkserial", "idle", 11), [device], bridge)
+    assert device.state == "oncall"
+    assert device.last_state_at == 20
+    assert not device.ring_active
+    handle_message(("alarm", 7, "sdkserial", "ringing", 12), [device], bridge)
+    assert bridge.ring.call_count == 2
+    assert device.state == "oncall"
+    handle_message(("alarm", 7, "sdkserial", "idle", 11), [device], bridge)
+    assert device.ring_active
+    handle_message(("alarm", 7, "sdkserial", "ringing", 21), [device], bridge)
+    assert bridge.ring.call_count == 2
+
+
+@pytest.mark.parametrize("initial_state,expected_count", [("idle", 1), ("ringing", 0)])
+def test_new_session_seeds_episode_without_replaying_ring(device, mocker, initial_state, expected_count):
+    device.online = False
+    device.ring_active = True
+    device.last_ring_state_at = 10
+    mocker.patch("main.monotonic", return_value=20)
+    mocker.patch.object(device, "authenticate")
+    mocker.patch.object(device, "setup_alarm")
+    mocker.patch.object(device, "get_call_state", return_value=initial_state)
+    bridge = Mock()
+    check_device(device, [device], bridge, 5)
+    bridge.ring.assert_not_called()
+    handle_message(("alarm", 7, "sdkserial", "ringing", 21), [device], bridge)
+    assert bridge.ring.call_count == expected_count
+    handle_message(("alarm", 7, "sdkserial", "idle", 22), [device], bridge)
+    handle_message(("alarm", 7, "sdkserial", "ringing", 23), [device], bridge)
+    assert bridge.ring.call_count == expected_count + 1
+
+
+def test_indoor_polling_still_tracks_call_transitions(device, mocker):
+    device.config.model = "DS-KH6320-WTE1"
+    mocker.patch.object(device, "check_identity")
+    poll = mocker.patch.object(device, "get_call_state")
+    for state in ("ringing", "oncall", "idle"):
+        poll.return_value = state
+        check_device(device, [device], Mock(), 5)
+        assert device.state == state
+        assert device.ring_active is (state == "ringing")
+
+
+@pytest.mark.parametrize("user_id,serial,received", [(8, "sdkserial", 21), (7, "other", 21), (7, "sdkserial", 19)])
+def test_unmatched_or_previous_session_alarm_cannot_rearm_episode(device, user_id, serial, received):
+    device.connected_at = 20
+    device.ring_active = True
+    device.last_ring_state_at = 20
+    bridge = Mock()
+    handle_message(("alarm", user_id, serial, "idle", received), [device], bridge)
+    handle_message(("alarm", 7, "sdkserial", "ringing", 22), [device], bridge)
+    bridge.ring.assert_not_called()
+
+
 @pytest.mark.parametrize("failure", ["expired", "mqtt_reconnected", "device_reconnected", "offline", "broker_offline"])
 def test_stale_command_discarded(device, failure):
     bridge = Mock(connected=True, epoch="current")

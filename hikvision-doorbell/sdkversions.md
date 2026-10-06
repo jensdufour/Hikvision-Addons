@@ -33,7 +33,7 @@ The downloaded official header also exposed the remaining `NET_DVR_GetErrorMsg` 
 
 Keep this candidate staged, not promoted. The archive contains developer guides, a general update-history section and third-party license notices; no standalone 6.1.9.48 release note or blanket SDK redistribution permission was established. Clarify distribution terms before adding new proprietary binaries to the public fork or publishing an image.
 
-After separate approval, repeat the quiet supervised ring test with controls disabled, then validate MQTT delivery and reconnect behavior. Preserve replay protection and resolve the separately identified outdoor-idle/deduplication gap rather than assuming the SDK upgrade fixes it. Unlock/reject effects remain separately authorized tests.
+The outdoor-idle/deduplication gap was subsequently fixed offline by separating SDK notification episodes from polled display state, not by upgrading the SDK. After separate approval, repeat the quiet supervised ring test with controls disabled and verify one fresh notification intent plus SDK dismissal, then validate MQTT delivery and reconnect behavior. Keep replay protection; a missing SDK dismissal must not be replaced with a guessed idle transition. Unlock/reject effects remain separately authorized tests.
 
 The Chinese portal lists newer Linux64 and ArmLinux64 6.1.11.30 packages, but neither has been acquired. This Linux64 archive does not contain an ARM64 upgrade. Do not relabel it as the latest release or change the ARM baseline.
 

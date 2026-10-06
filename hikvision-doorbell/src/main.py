@@ -13,18 +13,20 @@ from mqtt import MQTTBridge
 from sdk.utils import loadSDK, setupSDK, shutdownSDK
 
 
-def report_state(device, state, bridge, initial=False, observed=None):
+def report_state(device, state, bridge, initial=False, observed=None, *, polled=False):
     observed = monotonic() if observed is None else observed
+    if (not polled or not device.outdoor or initial) and observed >= device.last_ring_state_at:
+        device.last_ring_state_at = observed
+        if state == "ringing":
+            if not device.ring_active and not initial:
+                bridge.ring(device)
+            device.ring_active = True
+        elif state in ("idle", "oncall"):
+            device.ring_active = False
     if observed < device.last_state_at:
         return
     device.last_state_at = observed
     device.state = state
-    if state == "ringing":
-        if not device.ring_active and not initial:
-            bridge.ring(device)
-        device.ring_active = True
-    elif state in ("idle", "oncall"):
-        device.ring_active = False
     bridge.publish_state(device)
 
 
@@ -70,7 +72,7 @@ def check_device(device, devices, bridge, poll_seconds, alarms=None):
                     state = device.state
         if alarms is not None:
             drain_alarms(alarms, devices, bridge)
-        report_state(device, state, bridge, initial=initial, observed=observed)
+        report_state(device, state, bridge, initial=initial, observed=observed, polled=True)
         device.next_check = monotonic() + poll_seconds
     except Exception as error:
         logger.warning("{} offline: {}; retry in 30 seconds", device.config.name, type(error).__name__)

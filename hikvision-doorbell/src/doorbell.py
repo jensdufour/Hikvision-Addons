@@ -26,6 +26,7 @@ class Doorbell:
         self.next_check = 0.0
         self.last_event = 0.0
         self.last_state_at = 0.0
+        self.last_ring_state_at = 0.0
         self.ring_active = False
         self.poll_supported = True
 
