@@ -81,6 +81,10 @@ The checked devices return the exact configured model strings, including `(B)` o
 
 Next separately authorize a reversible deployment and validate actual MQTT/HA notification delivery, answered-call state/audio, and broker/device recovery. The local ring/dismiss observation above does not replace those gates. Unlock and Stop ringing tests require separate explicit consent and someone at the door.
 
+## SDK Upgrade Rehearsal
+
+The user-downloaded official Linux64 **6.1.9.48 build20230410** bundle passed an isolated startup check and read-only identity, idle-state, capability, passive-subscription and cleanup checks on both target devices. It is staged outside Git, not installed or published. The bundled amd64 **6.1.6.45** and ARM64 **6.1.8.101** remain unchanged. See [versions, archive hash, dependency caveats and promotion gates](hikvision-doorbell/sdkversions.md). The newer 6.1.11.30 packages have not been acquired, and the candidate's supervised ring, MQTT and recovery acceptance remain pending.
+
 ## Attribution And Distribution
 
 The protocol work and bundled Hikvision SDK come from the upstream project and its contributors. No project-wide upstream license was found during the audit. The retained example's Apache license is not a license for the whole application or the vendor SDK. Clarify modified-application and SDK redistribution rights before publishing a release image or distributing the modified application. No new license is asserted here.
