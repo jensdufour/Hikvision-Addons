@@ -26,6 +26,8 @@ Frigate owns video, snapshots and recordings. Home Assistant owns notifications.
 
 The manifest builds locally in Supervisor instead of referencing an unpublished image. It remains experimental and manual-start. Repository preparation is not deployment approval; nothing has been installed in HA by this refactor.
 
+Standalone deployment files and stale upstream IDE/issue/funding metadata are removed. Local credentials, options, caches and backups stay ignored; SDK runtime files remain tracked with their original notices.
+
 ## Verified State
 
 Repository checks: 110 offline tests and focused Python lint pass. Fresh amd64 and ARM64 images build and pass version, callback, error-lookup and cleanup checks with networking disabled. These are local results, not a claim of completed GitHub CI or HA installation.

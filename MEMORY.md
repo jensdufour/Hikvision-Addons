@@ -5,6 +5,7 @@
 - Sole production target: one Supervisor-managed HA add-on for DS-KV6113-WPE1(B) and DS-KH6320-WTE1. Reuse existing MQTT and Frigate; HA owns notifications. Local containers are test tools only.
 - User authorized refactoring, SDK inclusion and focused commits/pushes on 2026-10-06. No deployment, new device commands, firmware changes or sound changes are authorized by that cleanup request.
 - Runtime, tests, manifest, Dockerfile and both architecture bundles live in `doorbell/`. Supervisor builds locally; do not restore the unpublished image reference or a second standalone production path.
+- Removed stale upstream IDE/issue/funding metadata. Keep `.env*`, local `options.json`, development environments, caches and backups ignored. Do not restore a blanket `*.so` ignore that hides required SDK files; vendor bytes and notices must remain intact.
 - Upstream base is `8f8b97c6b5731e9979eee28d011db6b860b826e1`. Preserve the reduced scope when reviewing upstream changes; do not overwrite it with an upstream sync.
 
 ## Safety Constraints
