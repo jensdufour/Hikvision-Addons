@@ -2,7 +2,7 @@
 
 An unreleased, reduced fork of [pergolafabio/Hikvision-Addons](https://github.com/pergolafabio/Hikvision-Addons), based on `8f8b97c6b5731e9979eee28d011db6b860b826e1`.
 
-Targets **DS-KV6113-WPE1(B)** outdoor stations and **DS-KH6320-WTE1** indoor stations only. Read-only SDK identity, call-status, capability and passive event-subscription checks have passed on both physical devices; ring delivery and physical control effects remain unverified. No image is published by this fork's CI.
+Targets **DS-KV6113-WPE1(B)** outdoor stations and **DS-KH6320-WTE1** indoor stations only. Read-only firmware checks and a supervised native ring/dismiss cycle have passed. MQTT/phone delivery, answered-call behavior, recovery and physical unlock/reject effects remain unverified. No image is published by this fork's CI.
 
 ## Scope
 
@@ -61,11 +61,23 @@ Both firmwares advertise call states `idle`, `ring`, and `onCall`. The parser no
 
 The passive probe immediately invoked alarm-channel cleanup and logout; local handles were cleared on both devices. It did not wait for or verify a real event. No ring was injected, no MQTT state was published and no unlock/reject command was sent. Advertised support is not proof of the physical command effect. Device credentials, addresses, serials and raw private exports are not included in these findings.
 
+## Supervised Ring Test
+
+On 2026-10-06 the user pressed the outdoor button once and confirmed the indoor station stayed quiet. A guarded local observer ran the actual SDK callback and state logic with all unlock/reject/answer calls blocked and no MQTT client.
+
+- One current outdoor SDK ring event and its later dismissal decoded with matching identity; 30 historical callbacks were discarded.
+- Exactly one local notification intent was produced, with no MQTT publication or phone notification.
+- The indoor station reported ringing and returned to idle naturally after about 31 seconds. The outdoor poll returned idle during the call, so it is not a reliable standalone source of call progress on this firmware; use the indoor state for call progress and the outdoor event for notifications.
+- Both native event-channel closes and logouts succeeded, and the observer exited.
+- Indoor output volume was backed up, temporarily changed from 7 to 0, and restored to 7 with exact semantic readback after idle. Conversation volume stayed 7 throughout. No native intercom routing, Frigate or HA configuration was changed.
+
+The initial no-button runs are not acceptance evidence: they exposed the native layout and historical-replay defects fixed before the real press. The temporary audio helper used the upstream write-only `type=audioOutput` field; replaying the GET XML without it was rejected without changing volume. Private raw receipts and rollback XML remain outside Git.
+
 ## Before A Device Pilot
 
 The checked devices return the exact configured model strings, including `(B)` outdoors. Recheck after firmware updates or replacement. A device reporting the KV6113 model without that revision suffix remains deliberately rejected; no speculative model alias was added.
 
-Then separately authorize a reversible deployment and observe real ring, answer, dismissal, broker/device recovery and native indoor audio. Unlock and Stop ringing tests require separate explicit consent and someone at the door. Linux SDK loading alone does not prove firmware compatibility.
+Next separately authorize a reversible deployment and validate actual MQTT/HA notification delivery, answered-call state/audio, and broker/device recovery. The local ring/dismiss observation above does not replace those gates. Unlock and Stop ringing tests require separate explicit consent and someone at the door.
 
 ## Attribution And Distribution
 
