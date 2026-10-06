@@ -1,10 +1,10 @@
-# Configuration And Pilot Requirements
+# Configuration
 
 ## Status
 
-This fork has offline tests, successful read-only SDK checks on both target devices and a supervised local ring/dismiss test, not full hardware acceptance. The [verified state](../README.md#verified-state) and [SDK record](SDK.md) describe exact limits. The manifest is experimental and manual-start. Supervisor builds from this directory; no prebuilt image is required or published by CI.
+The manifest is experimental and defaults to manual startup. Supervisor builds from this directory; no prebuilt image is required or published by CI. See [development checks](DEVELOPMENT.md) and the [SDK inventory](SDK.md).
 
-For an authorized installation, add `https://github.com/jensdufour/Hikvision-Addons` as an add-on repository, select Hikvision Doorbell Lite and let Supervisor build it. Enter the two device configurations and MQTT settings before starting; the blank default addresses/passwords intentionally fail validation. Do not start the upstream bridge concurrently. The October6 pilot now passes Supervisor build/start and real MQTT discovery/availability; see the root README for the remaining acceptance checks.
+Add `https://github.com/jensdufour/Hikvision-Addons` as an add-on repository, select Hikvision Doorbell Lite and let Supervisor build it. Enter the two device configurations and MQTT settings before starting; the blank default addresses/passwords intentionally fail validation. Do not start the upstream bridge concurrently.
 
 ## Options
 
@@ -27,21 +27,21 @@ The [test configuration example](default_config.json) uses documentation-only IP
 
 Availability combines broker/bridge connectivity and that device's health. The indoor station does not emit a second ring notification. Use the outdoor event entity's `ring` event in a Home Assistant automation; add Frigate imagery there if desired. SDK events and polling for the same ringing episode are deduplicated. Events are not retained or replayed when the broker returns.
 
-Call states are `idle`, `ringing`, `oncall`, and `unknown`. Both checked firmwares advertise `ring`, which is normalized to `ringing`. Offline entities become unavailable. No timer pretends that a call has ended. When status polling is unsupported, SDK events remain usable and stale state becomes `unknown` after 120 seconds. Stop ringing intentionally does nothing if current ringing cannot be confirmed.
+Call states are `idle`, `ringing`, `oncall`, and `unknown`. Firmware state `ring` is normalized to `ringing`. Offline entities become unavailable. No timer pretends that a call has ended. When status polling is unsupported, SDK events remain usable and stale state becomes `unknown` after 120 seconds. Stop ringing intentionally does nothing if current ringing cannot be confirmed.
 
-The supervised press showed that outdoor polling can remain idle while the indoor station is ringing. Use the indoor Call state and Stop ringing control for call progress; use the outdoor Doorbell event for notifications. Actual rejection and answered-call behavior still need separate testing. Historical SDK records are filtered using the device clock captured at subscription, not interpreted as new presses.
+Outdoor polling can remain idle while the indoor station is ringing. Use the indoor Call state and Stop ringing control for call progress; use the outdoor Doorbell event for notifications. Historical SDK records are filtered using the device clock captured at subscription, not interpreted as new presses.
 
 Outdoor polls cannot emit ring events or reset notification deduplication. A current SDK dismissal re-arms the next episode; older SDK events cannot rewind it. A missed dismissal may suppress later notifications until a valid dismissal or new session. Startup suppresses replay, and no arbitrary timeout invents a new press. A clock moving behind the subscription baseline also requires correction and reconnection.
 
 Controls require verified model/serial and a current connection. Command topics rotate with broker/device sessions, retained commands are rejected, and queued commands expire after three seconds. Ambiguous failures are not retried. Failed native cleanup remains tracked and blocks a replacement login while the device stays unavailable.
 
-These guards do not authenticate MQTT publishers. Anyone able to publish to the broker's command topics can request a control action. The pilot retains the household's existing anonymous LAN-only broker policy; use broker authentication and topic ACLs when that trust boundary is insufficient. No public listener is added by this add-on.
+These guards do not authenticate MQTT publishers. Anyone able to publish to the broker's command topics can request a control action. Use broker authentication and topic ACLs appropriate to the installation's trust boundary. No public listener is added by this add-on.
 
 Unlock controls the outdoor station's first relay through the existing SDK command, with ISAPI fallback only on error 23. It does not expose an indoor duplicate unlock control. Stop ringing rejects a current incoming call; it does not hang up an established conversation.
 
 ## Future Migration
 
-Before any pilot, record actual firmware and model readback; confirm outdoor ring events, status polling, and the intended relay. Some firmware may omit the `(B)` suffix. That currently fails closed and needs evidence before adding an explicit mapping.
+Before enabling controls, verify actual firmware and model readback, outdoor ring events, status polling, and the intended relay. Some firmware may omit the `(B)` suffix. That currently fails closed and needs evidence before adding an explicit mapping.
 
 Back up the existing add-on configuration and MQTT entity/automation references. Stop the upstream bridge before starting this one. New entity IDs and a new slug prevent a silent in-place takeover; rebind automations deliberately. Removed upstream discovery topics are not deleted automatically, and existing retained command topics are never subscribed to by this bridge.
 

@@ -35,4 +35,4 @@ For ARM64, use an ARM host or emulation, `--platform linux/arm64`, `BUILD_ARCH=a
 
 The build context is allowlisted to source, runtime requirements, matched SDK bundles and license notices. Local options, secrets, caches, tests and documentation are excluded from the image. Local examples use documentation-only addresses.
 
-CI runs offline tests, focused lint and network-disabled native checks; it has read-only repository permissions and no image publishing or device credentials. Successful CI is not evidence of HA installation or physical command effects. See the root README for remaining acceptance gates.
+CI runs offline tests, focused lint and network-disabled native checks; it has read-only repository permissions and no image publishing or device credentials. Successful CI is not evidence of HA installation or physical command effects. Verify device behavior separately for each installation; keep site-specific results in private operations documentation.
