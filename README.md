@@ -2,7 +2,7 @@
 
 An unreleased, reduced fork of [pergolafabio/Hikvision-Addons](https://github.com/pergolafabio/Hikvision-Addons), based on `8f8b97c6b5731e9979eee28d011db6b860b826e1`.
 
-Targets **DS-KV6113-WPE1(B)** outdoor stations and **DS-KH6320-WTE1** indoor stations only. Read-only SDK identity, call-status and capability checks have passed on both physical devices; ring delivery and physical control effects remain unverified. No image is published by this fork's CI.
+Targets **DS-KV6113-WPE1(B)** outdoor stations and **DS-KH6320-WTE1** indoor stations only. Read-only SDK identity, call-status, capability and passive event-subscription checks have passed on both physical devices; ring delivery and physical control effects remain unverified. No image is published by this fork's CI.
 
 ## Scope
 
@@ -44,16 +44,16 @@ Every test blocks network connections and vendor-library loading. Separate Docke
 
 ## Read-Only Firmware Checks
 
-Verified on 2026-10-06 using the fork's Linux SDK login and GET path, with control and event-subscription functions explicitly blocked:
+Verified on 2026-10-06 using the fork's Linux SDK login and GET path. Initial probes blocked control and event-subscription functions; a separate idle-gated probe allowed only passive event subscription while physical control functions stayed blocked:
 
 | Model | Firmware | Verified read-only behavior |
 | --- | --- | --- |
-| DS-KV6113-WPE1(B) | V2.2.53 build 220816 | Exact identity accepted, call state reads idle, one door relay advertised, reject advertised |
-| DS-KH6320-WTE1 | V2.2.2 build 221129 | Exact identity accepted, call state reads idle, reject advertised |
+| DS-KV6113-WPE1(B) | V2.2.53 build 220816 | Exact identity accepted, call state reads idle, one door relay advertised, reject advertised, passive event channel opens |
+| DS-KH6320-WTE1 | V2.2.2 build 221129 | Exact identity accepted, call state reads idle, reject advertised, passive event channel opens |
 
 Both firmwares advertise call states `idle`, `ring`, and `onCall`. The parser now normalizes `ring` to `ringing`, with regressions for both models and the Stop ringing path. Previously it produced `unknown`, preventing rejection of a ringing call.
 
-No ring was injected, no event subscription was opened, no MQTT state was published and no unlock/reject command was sent. Advertised support is not proof of the physical command effect. Device credentials, addresses, serials and raw private exports are not included in these findings.
+The passive probe immediately invoked alarm-channel cleanup and logout; local handles were cleared on both devices. It did not wait for or verify a real event. No ring was injected, no MQTT state was published and no unlock/reject command was sent. Advertised support is not proof of the physical command effect. Device credentials, addresses, serials and raw private exports are not included in these findings.
 
 ## Before A Device Pilot
 

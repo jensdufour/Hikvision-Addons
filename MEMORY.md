@@ -1,5 +1,7 @@
 # Hikvision Doorbell Lite Decisions
 
+- Later 2026-10-06 passive follow-up: with both devices freshly confirmed idle, the retained SDK event-channel setup succeeded for each. Cleanup/logout were invoked immediately and local handles cleared. No real event delivery was observed or asserted; physical control functions remained blocked and no MQTT client was started. The firmware fix has 72 passing offline tests plus focused flake8. Source commits are pushed; deployment and image publication remain separate.
+
 - 2026-10-06 follow-up: user authorized focused source commits/push and read-only firmware compatibility checks. User explicitly confirmed that the indoor station uses the existing outdoor credentials. Both actual Linux SDK login/identity/call-status paths pass: outdoor DS-KV6113-WPE1(B) V2.2.53 build 220816; indoor DS-KH6320-WTE1 V2.2.2 build 221129. Both advertise `idle,ring,onCall` and `reject`; outdoor advertises exactly one relay. Fix the verified `ring` -> `ringing` parser mismatch; never reinterpret unknown states as idle. Control and event-subscription functions were blocked in probes. No deployment, MQTT publishing, ringing, unlock, reject, setting change or reboot occurred. Physical ring delivery/control effects and recovery remain separate acceptance gates.
 
 - 2026-10-06: offline-only implementation authorized for DS-KV6113-WPE1(B) and DS-KH6320-WTE1. Keep ring events, call state, outdoor unlock, availability/recovery and Stop ringing. No deployment, real device commands, HA changes, or Frigate changes authorized.
