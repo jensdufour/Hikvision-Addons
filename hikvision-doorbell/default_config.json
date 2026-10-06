@@ -1,0 +1,20 @@
+{
+  "doorbells": [
+    {
+      "name": "Front door",
+      "model": "DS-KV6113-WPE1(B)",
+      "ip": "192.0.2.10",
+      "username": "admin",
+      "password": "replace-me"
+    },
+    {
+      "name": "Indoor station",
+      "model": "DS-KH6320-WTE1",
+      "ip": "192.0.2.11",
+      "username": "admin",
+      "password": "replace-me"
+    }
+  ],
+  "mqtt": {"host": "192.0.2.12", "port": 1883, "ssl": false},
+  "system": {"log_level": "INFO", "poll_seconds": 5}
+}

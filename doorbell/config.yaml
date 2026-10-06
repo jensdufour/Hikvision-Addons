@@ -1,59 +1,48 @@
-name: Hikvision Doorbell
-description: Connect your Hikvision doorbells to Home Assistant
-version: '3.0.34'
-image: ghcr.io/pergolafabio/hikvision-doorbell
-slug: hikvision_doorbell
-url: https://github.com/pergolafabio/Hikvision-Addons/tree/main/doorbell
+name: Hikvision Doorbell Lite
+description: Ring events, call state, unlock and stop ringing for two Hikvision models
+version: '0.1.0-dev'
+image: ghcr.io/jensdufour/hikvision-doorbell-lite
+slug: hikvision_doorbell_lite
+url: https://github.com/jensdufour/Hikvision-Addons
 arch:
-- amd64
-- i386
-- aarch64
-stage: stable
+  - amd64
+  - aarch64
+stage: experimental
 startup: application
-boot: auto
-stdin: true
-homeassistant_api: true
-map:
-  - media:rw
-  - config:rw
-
-# Default options when used as an HA App
+boot: manual
+init: false
+services:
+  - mqtt:need
 options:
   doorbells:
-    - name: ""
-      ip: ""
+    - name: Front door
+      model: DS-KV6113-WPE1(B)
+      ip: ''
       username: admin
-      password: ""
-      scenes: false
+      password: ''
+    - name: Indoor station
+      model: DS-KH6320-WTE1
+      ip: ''
+      username: admin
+      password: ''
   system:
     log_level: INFO
-    sdk_log_level: NONE
+    poll_seconds: 5
   mqtt: {}
-
-# Schema for the options above
 schema:
   doorbells:
     - name: str
+      model: 'match(^(DS-KV6113-WPE1\(B\)|DS-KH6320-WTE1)$)'
       ip: str
-      port: "int?"
+      port: int(1,65535)?
       username: str
-      password: str
-      output_relays: "int?"
-      snapshot: "bool?"
-      scenes: "bool?"
-      call_state_poll: "int?"
-      scene_state_poll: "int?"
-      alarm_state_poll: "int?"
+      password: password
   system:
-    log_level: match(^ERROR|WARNING|INFO|DEBUG$)
-    sdk_log_level: match(^NONE|ERROR|INFO|DEBUG$)?
+    log_level: list(ERROR|WARNING|INFO|DEBUG)
+    poll_seconds: int(2,60)
   mqtt:
-    host: "str?"
-    port: "int?"
-    ssl: "bool?"
-    username: "str?"
-    password: "str?"    
-
-# To request MQTT configuration using the supervisor API
-services:
-  - "mqtt:need"
+    host: str?
+    port: int(1,65535)?
+    ssl: bool?
+    username: str?
+    password: password?

@@ -1,4 +1,4 @@
 # https://developers.home-assistant.io/docs/apps/repository#repository-configuration
-name: Hikvision Apps
-url: "https://github.com/pergolafabio/Hikvision-Addons"
-maintainer: Pergola Fabio <pergola.fabio@gmail.com>
+name: Hikvision Doorbell Lite (unreleased)
+url: "https://github.com/jensdufour/Hikvision-Addons"
+maintainer: jensdufour
