@@ -101,6 +101,46 @@ def test_device_recovery_closes_failed_session(device, mocker):
     assert bridge.refresh_needed
 
 
+@pytest.mark.parametrize("failure_path", ["health", "command"])
+def test_cleanup_failure_keeps_device_offline_and_retries_bounded(device, mocker, failure_path):
+    device.alarm_handle = 9
+    device.sdk.NET_DVR_CloseAlarmChan_V30.return_value = False
+    device.sdk.NET_DVR_Logout_V30.return_value = False
+    mocker.patch.object(device, "check_identity", side_effect=RuntimeError("mock disconnected"))
+    mocker.patch.object(device, "unlock_door", side_effect=RuntimeError("mock uncertain result"))
+    report_error = mocker.patch("main.logger.error")
+    bridge = Mock(connected=True, epoch="current")
+    if failure_path == "health":
+        check_device(device, [device], bridge, 5)
+    else:
+        handle_message(("command", device, "unlock", "current", device.generation, monotonic()), [device], bridge)
+    assert not device.online
+    assert device.state == "unknown"
+    assert device.user_id == 7 and device.alarm_handle == 9
+    assert device.next_check > monotonic() + 20
+    bridge.publish_state.assert_called_with(device)
+    report_error.assert_any_call("Cleanup incomplete for {}: {}", device.config.name, mocker.ANY)
+
+
+def test_recovery_cleans_pending_handles_before_next_login(device, mocker):
+    device.online = False
+    device.alarm_handle = 9
+    device.sdk.NET_DVR_CloseAlarmChan_V30.return_value = True
+    device.sdk.NET_DVR_Logout_V30.return_value = True
+    device.sdk.NET_DVR_Login_V30.return_value = 8
+    mocker.patch.object(device, "check_identity")
+    mocker.patch.object(device, "get_call_state", return_value="idle")
+    mocker.patch.object(device, "setup_alarm")
+    bridge = Mock()
+    check_device(device, [device], bridge, 5)
+    assert device.user_id == device.alarm_handle == -1
+    assert not device.online
+    device.sdk.NET_DVR_Login_V30.assert_not_called()
+    check_device(device, [device], bridge, 5)
+    assert device.online
+    device.sdk.NET_DVR_Login_V30.assert_called_once()
+
+
 def test_old_event_cannot_override_newer_poll(device):
     report_state(device, "oncall", Mock(), observed=20)
     handle_message(("alarm", 7, "sdkserial", "ringing", 19), [device], Mock())
@@ -189,12 +229,14 @@ def test_unsupported_poll_does_not_supersede_queued_sdk_event(device, mocker):
     assert device.state == "ringing"
 
 
-def test_shutdown_drops_waiting_command(device, mocker):
+@pytest.mark.parametrize("cleanup_succeeds", [True, False])
+def test_shutdown_drops_waiting_command(device, mocker, cleanup_succeeds):
     import main as application
     from threading import Event
 
     stopping = Event()
     inbox = Mock()
+    device.sdk.NET_DVR_Logout_V30.return_value = cleanup_succeeds
 
     def stop_during_read(**kwargs):
         stopping.set()
@@ -211,8 +253,10 @@ def test_shutdown_drops_waiting_command(device, mocker):
     cleanup = mocker.patch("main.shutdownSDK")
     mocker.patch("main.Doorbell", return_value=device)
     mocker.patch("main.EventManager")
-    mocker.patch("main.MQTTBridge", return_value=Mock(refresh_needed=False))
+    bridge = Mock(refresh_needed=False)
+    mocker.patch("main.MQTTBridge", return_value=bridge)
     command = mocker.patch("main.handle_message")
     application.main()
     command.assert_not_called()
+    bridge.stop.assert_called_once()
     cleanup.assert_called_once()

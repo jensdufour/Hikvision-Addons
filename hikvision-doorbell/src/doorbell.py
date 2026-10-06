@@ -32,6 +32,8 @@ class Doorbell:
         return self.config.model == "DS-KV6113-WPE1(B)"
 
     def authenticate(self):
+        if self.user_id >= 0 or self.alarm_handle >= 0:
+            raise RuntimeError("Previous session requires cleanup before login")
         info = NET_DVR_DEVICEINFO_V30()
         self.user_id = self.sdk.NET_DVR_Login_V30(
             str(self.config.ip).encode("ascii"), self.config.port,
@@ -71,16 +73,22 @@ class Doorbell:
         self.online = False
         self.state = "unknown"
         self.generation += 1
-        try:
-            if self.alarm_handle >= 0:
-                self.sdk.NET_DVR_CloseAlarmChan_V30(self.alarm_handle)
-        finally:
-            self.alarm_handle = -1
+        failures = []
+        for attribute, close in (
+                ("alarm_handle", self.sdk.NET_DVR_CloseAlarmChan_V30),
+                ("user_id", self.sdk.NET_DVR_Logout_V30)):
+            handle = getattr(self, attribute)
+            if handle < 0:
+                continue
             try:
-                if self.user_id >= 0:
-                    self.sdk.NET_DVR_Logout_V30(self.user_id)
-            finally:
-                self.user_id = -1
+                if not close(handle):
+                    raise SDKError(self.sdk, f"Failed to close {attribute}")
+            except Exception as error:
+                failures.append((attribute, error))
+            else:
+                setattr(self, attribute, -1)
+        if failures:
+            raise RuntimeError("SDK cleanup failed: " + ", ".join(attribute for attribute, _ in failures)) from failures[0][1]
 
     def _call_isapi(self, method: str, url: str, body: str = "") -> str:
         response = call_ISAPI(self.sdk, self.user_id, method, url, body)

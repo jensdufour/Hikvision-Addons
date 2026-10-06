@@ -123,3 +123,57 @@ def test_logout_closes_alarm_before_login_once(device):
         ("NET_DVR_CloseAlarmChan_V30", (9,), {}), ("NET_DVR_Logout_V30", (7,), {})]
     assert not device.online
     assert device.user_id == -1
+
+
+@pytest.mark.parametrize("alarm_closed,logged_out", [(False, True), (True, False), (False, False)])
+def test_logout_reports_failures_and_retains_failed_handles(device, alarm_closed, logged_out):
+    device.alarm_handle = 9
+    device.sdk.NET_DVR_CloseAlarmChan_V30.return_value = alarm_closed
+    device.sdk.NET_DVR_Logout_V30.return_value = logged_out
+    generation = device.generation
+    with pytest.raises(RuntimeError, match="cleanup failed"):
+        device.logout()
+    assert device.alarm_handle == (-1 if alarm_closed else 9)
+    assert device.user_id == (-1 if logged_out else 7)
+    assert not device.online
+    assert device.state == "unknown"
+    assert device.generation > generation
+    device.sdk.NET_DVR_CloseAlarmChan_V30.assert_called_once_with(9)
+    device.sdk.NET_DVR_Logout_V30.assert_called_once_with(7)
+
+
+def test_logout_attempts_login_cleanup_after_channel_exception(device):
+    device.alarm_handle = 9
+    device.sdk.NET_DVR_CloseAlarmChan_V30.side_effect = OSError("mock failure")
+    device.sdk.NET_DVR_Logout_V30.return_value = True
+    with pytest.raises(RuntimeError, match="cleanup failed"):
+        device.logout()
+    assert device.alarm_handle == 9
+    assert device.user_id == -1
+    device.sdk.NET_DVR_Logout_V30.assert_called_once_with(7)
+
+
+def test_logout_retry_only_attempts_unresolved_handle(device):
+    device.alarm_handle = 9
+    device.sdk.NET_DVR_CloseAlarmChan_V30.return_value = False
+    device.sdk.NET_DVR_Logout_V30.return_value = True
+    with pytest.raises(RuntimeError, match="cleanup failed"):
+        device.logout()
+    device.sdk.NET_DVR_CloseAlarmChan_V30.return_value = True
+    device.logout()
+    device.logout()
+    assert device.alarm_handle == device.user_id == -1
+    assert device.sdk.NET_DVR_CloseAlarmChan_V30.call_count == 2
+    device.sdk.NET_DVR_Logout_V30.assert_called_once_with(7)
+
+
+@pytest.mark.parametrize("user_id,alarm_handle", [(7, -1), (-1, 9), (7, 9)])
+def test_authenticate_refuses_unresolved_handles(device, mocker, user_id, alarm_handle):
+    device.online = False
+    device.user_id = user_id
+    device.alarm_handle = alarm_handle
+    device.sdk.NET_DVR_Login_V30.return_value = 8
+    mocker.patch.object(device, "check_identity")
+    with pytest.raises(RuntimeError, match="cleanup"):
+        device.authenticate()
+    device.sdk.NET_DVR_Login_V30.assert_not_called()

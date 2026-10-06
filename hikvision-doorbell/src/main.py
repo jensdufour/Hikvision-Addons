@@ -36,6 +36,16 @@ def drain_alarms(alarms, devices, bridge):
             break
 
 
+def disconnect_device(device, bridge):
+    try:
+        device.logout()
+    except Exception as error:
+        logger.error("Cleanup incomplete for {}: {}", device.config.name, error)
+    finally:
+        device.next_check = monotonic() + 30
+        bridge.publish_state(device)
+
+
 def check_device(device, devices, bridge, poll_seconds, alarms=None):
     initial = not device.online
     observed = monotonic()
@@ -64,9 +74,7 @@ def check_device(device, devices, bridge, poll_seconds, alarms=None):
         device.next_check = monotonic() + poll_seconds
     except Exception as error:
         logger.warning("{} offline: {}; retry in 30 seconds", device.config.name, type(error).__name__)
-        device.logout()
-        bridge.publish_state(device)
-        device.next_check = monotonic() + 30
+        disconnect_device(device, bridge)
 
 
 def handle_message(message, devices, bridge):
@@ -96,9 +104,7 @@ def handle_message(message, devices, bridge):
         device.next_check = 0
     except Exception as error:
         logger.error("{} command failed ({}); not retrying", device.config.name, type(error).__name__)
-        device.logout()
-        bridge.publish_state(device)
-        device.next_check = monotonic() + 30
+        disconnect_device(device, bridge)
 
 
 def main():
@@ -137,8 +143,8 @@ def main():
         for device in devices:
             try:
                 device.logout()
-            except Exception:
-                logger.warning("Device cleanup failed for {}", device.config.name)
+            except Exception as error:
+                logger.error("Device cleanup failed for {}: {}", device.config.name, error)
         try:
             bridge.stop()
         finally:

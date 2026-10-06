@@ -26,6 +26,8 @@ State polling defaults to five seconds because the existing SDK event path does 
 
 SDK alarms use a separate bounded queue from commands. Pending alarms are handled before publishing a newer poll snapshot, so a short ring is not erased by a later idle/on-call sample. Repeated ringing reports remain deduplicated, and an event newer than the poll still owns the displayed state.
 
+Cleanup checks both native close results and clears a handle only after success. Failed handles remain tracked, are reported as cleanup errors, and block a new login until cleanup succeeds. The device stays unavailable while the normal 30-second recovery cycle retries cleanup; other devices continue running. Shutdown still attempts MQTT and SDK cleanup even if a device close fails. Clearing a Python field alone is not evidence of successful native cleanup.
+
 ## Configuration And Migration
 
 See [add-on documentation](doorbell/DOCS.md) and [standalone Docker instructions](docs/docker.md).
