@@ -1,6 +1,6 @@
-# Standalone Docker
+# Local Container Rehearsal
 
-This is an unreleased offline prototype. Building locally does not establish compatibility with the devices' firmware or authorize deployment.
+The final deployment target is the Home Assistant add-on only. These container commands are development and rehearsal tools, not an alternative production installation. Building locally does not authorize deployment or any live device command.
 
 From the repository root, build for the machine architecture:
 
@@ -13,8 +13,8 @@ For ARM, use `--platform linux/arm64 --build-arg BUILD_ARCH=aarch64`. Keep platf
 
 If a corporate network requires a public package mirror, pass `--build-arg PIP_INDEX_URL=https://your-public-mirror/simple/`. Do not disable TLS or put credentials into build arguments.
 
-For a separately approved real deployment, provide JSON options at `/data/options.json`, or set `CONFIG_FILE_PATH` to its read-only mounted location. `hikvision-doorbell/default_config.json` is a nonfunctional example using documentation IPs. Local `options.json` is ignored by Git. Never commit credentials.
+For a separately approved local rehearsal, provide JSON options at `/data/options.json`, or set `CONFIG_FILE_PATH` to its read-only mounted location. `hikvision-doorbell/default_config.json` is a nonfunctional example using documentation IPs. Local `options.json` is ignored by Git. Never commit credentials. Supervisor manages the production add-on and its options; do not deploy a second standalone service.
 
-The compose file uses a read-only options mount, no published ports, and no host network. Its `BUILD_ARCH` defaults to `amd64`; set it to `aarch64` on ARM. It does not mount Home Assistant config or media. Do not run compose during offline validation: a configured runtime intentionally connects to the broker and devices.
+The compose file is retained for local development only. It uses a read-only options mount, no published ports, and no host network. Its `BUILD_ARCH` defaults to `amd64`; set it to `aarch64` on ARM. It does not mount Home Assistant config or media. Do not run compose during offline validation: a configured runtime intentionally connects to the broker and devices.
 
 Do not run the upstream bridge simultaneously during migration. New entity IDs and exact model guards are documented in [add-on documentation](../doorbell/DOCS.md).

@@ -36,13 +36,15 @@ After the user authorized the quiet test, a bounded local observer ran the compl
 - One fresh outdoor SDK ring and its dismissal decoded with matching identity, about 31 seconds apart. Exactly one local notification intent was recorded, and 17 historical callbacks were ignored.
 - Indoor call status changed to ringing and then idle. Outdoor polling continued to report idle during the call; it did not reset the event-owned ring latch. Acceptance required the decoded dismissal, idle readback, and an inactive ring latch.
 - Both device alarm-channel closes/logouts and native SDK cleanup returned success; the observer exited and its container was removed. Zero control attempts and no MQTT or phone notification.
-- A separate guarded helper backed up the current indoor audio XML, muted output 7 -> 0 while talk volume stayed 7, then restored output to 7 after idle with exact semantic readback. The mute was API-verified; actual acoustic silence and the manual press count were not separately confirmed by the user in this run.
+- A separate guarded helper backed up the current indoor audio XML, muted output 7 -> 0 while talk volume stayed 7, then restored output to 7 after idle with exact semantic readback. The mute and restoration were API-verified; the user subsequently confirmed the indoor station stayed quiet during the press.
 
 Private `ring-test/ring-observation.json` and `ring-test/restore-result.json` own this result. No runtime source changes were needed during the observation. This is not a test of answered calls, physical unlock/reject, broker/device outages, MQTT delivery or image deployment.
 
 ## Promotion Gate
 
 Keep this candidate staged, not promoted. The archive contains developer guides, a general update-history section and third-party license notices; no standalone 6.1.9.48 release note or blanket SDK redistribution permission was established. Clarify distribution terms before adding new proprietary binaries to the public fork or publishing an image.
+
+Promotion targets the Home Assistant add-on only. The local SDK mount and observer are temporary validation tools, not a standalone production service. Use the existing MQTT broker and Frigate installation; do not add another bridge deployment.
 
 The outdoor-idle/deduplication gap was fixed offline by separating SDK notification episodes from polled display state, not by upgrading the SDK. The candidate ring observation above now verifies one fresh notification intent plus SDK dismissal with that source. Next separately validate MQTT delivery and reconnect behavior. Keep replay protection; a missing SDK dismissal must not be replaced with a guessed idle transition. Unlock/reject effects remain separately authorized tests.
 
