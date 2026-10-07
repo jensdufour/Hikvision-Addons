@@ -29,7 +29,7 @@ Availability combines broker/bridge connectivity and that device's health. The i
 
 Call states are `idle`, `ringing`, `oncall`, and `unknown`. Firmware state `ring` is normalized to `ringing`. Offline entities become unavailable. No timer pretends that a call has ended. When status polling is unsupported, SDK events remain usable and stale state becomes `unknown` after 120 seconds. Stop ringing intentionally does nothing if current ringing cannot be confirmed.
 
-Outdoor polling can remain idle while the indoor station is ringing. Use the indoor Call state and Stop ringing control for call progress; use the outdoor Doorbell event for notifications. Historical SDK records are filtered using the device clock captured at subscription, not interpreted as new presses.
+Outdoor polling can remain idle while the indoor station is ringing. Use the indoor Call state and Stop ringing control for call progress; use the outdoor Doorbell event for notifications. Historical SDK records are filtered using the native SDK clock captured at subscription, not interpreted as new presses. This avoids differences in ISAPI's DST representation; a failed or incomplete native clock read keeps the device unavailable.
 
 Outdoor polls cannot emit ring events or reset notification deduplication. A current SDK dismissal re-arms the next episode; older SDK events cannot rewind it. A missed dismissal may suppress later notifications until a valid dismissal or new session. Startup suppresses replay, and no arbitrary timeout invents a new press. A clock moving behind the subscription baseline also requires correction and reconnection.
 

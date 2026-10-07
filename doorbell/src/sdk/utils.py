@@ -67,6 +67,7 @@ def setupFunctionTypes(lib: CDLL):
     lib.NET_DVR_Login_V30.argtypes = [c_char_p, WORD, c_char_p, c_char_p, POINTER(NET_DVR_DEVICEINFO_V30)]
     lib.NET_DVR_Logout_V30.argtypes = [c_int]
     lib.NET_DVR_CloseAlarmChan_V30.argtypes = [LONG]
+    lib.NET_DVR_GetDVRConfig.argtypes = [LONG, DWORD, LONG, c_void_p, DWORD, POINTER(DWORD)]
     lib.NET_DVR_SetDVRConfig.argtypes = [LONG, DWORD, DWORD, c_void_p, DWORD]
     lib.NET_DVR_GetErrorMsg.argtypes = [POINTER(LONG)]
     lib.NET_DVR_SetDVRMessageCallBack_V50.argtypes = [c_int, fMessageCallBack, c_void_p]

@@ -1,9 +1,9 @@
-from ctypes import POINTER, c_char_p, cast, sizeof
+from ctypes import POINTER, c_char_p, c_void_p, cast, sizeof
 from struct import pack_into
 from unittest.mock import Mock
 
 from sdk.utils import SDKError, call_ISAPI, setupSDK, setupFunctionTypes
-from sdk.hcnetsdk import LONG, NET_DVR_ALARMER, NET_DVR_SETUPALARM_PARAM_V50
+from sdk.hcnetsdk import DWORD, LONG, NET_DVR_ALARMER, NET_DVR_SETUPALARM_PARAM_V50
 
 
 def test_alarm_header_uses_wire_32bit_user_id():
@@ -18,6 +18,13 @@ def test_alarm_header_uses_wire_32bit_user_id():
     alarm = NET_DVR_ALARMER.from_buffer_copy(payload)
     assert alarm.lUserID == 7
     assert bytes(alarm.sSerialNumber).split(b"\0", 1)[0] == serial
+
+
+def test_clock_getter_signature_uses_sdk_widths():
+    sdk = Mock()
+    setupFunctionTypes(sdk)
+    assert sizeof(DWORD) == 4
+    assert sdk.NET_DVR_GetDVRConfig.argtypes == [LONG, DWORD, LONG, c_void_p, DWORD, POINTER(DWORD)]
 
 
 def test_subscription_signature_takes_a_pointer():

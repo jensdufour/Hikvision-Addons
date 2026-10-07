@@ -24,6 +24,8 @@ See [configuration, security and migration](doorbell/DOCS.md). MQTT publishers w
 
 ## Development
 
+Replay filtering uses the native SDK clock to match SDK alarm timestamps, including when ISAPI reports a different wall-time representation. A missing or invalid clock fails closed before subscription.
+
 - [doorbell/README.md](doorbell/README.md): complete add-on build context.
 - [doorbell/SDK.md](doorbell/SDK.md): bundled SDK versions, provenance and limitations.
 - [doorbell/DEVELOPMENT.md](doorbell/DEVELOPMENT.md): offline tests and native smoke checks.

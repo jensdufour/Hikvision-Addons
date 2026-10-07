@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1-dev - Unreleased
+
+- Read the alarm replay cutoff from the native SDK clock so it uses the same time basis as SDK event timestamps.
+- Reject missing, incomplete or invalid clock responses before subscribing; retain existing replay and command guards.
+- Cover native/ISAPI clock differences and the clock getter ABI in offline and network-disabled smoke checks.
+
 ## 0.1.0-dev - Unreleased
 
 - Restrict the bridge to DS-KV6113-WPE1(B) and DS-KH6320-WTE1.

@@ -8,7 +8,7 @@ import pytest
 from config import AppConfig
 from doorbell import Doorbell
 from sdk.utils import SDKError
-from sdk.hcnetsdk import NET_DVR_SETUPALARM_PARAM_V50
+from sdk.hcnetsdk import DWORD, NET_DVR_SETUPALARM_PARAM_V50
 
 
 @pytest.fixture
@@ -18,6 +18,16 @@ def device():
     sdk = Mock()
     sdk.NET_DVR_GetLastError.return_value = 23
     sdk.NET_DVR_GetErrorMsg.return_value = b"test error"
+
+    def read_clock(user_id, command, channel, output, length, returned):
+        assert command == 118 and channel == -1 and length == 24
+        values = cast(output, POINTER(DWORD))
+        for index, value in enumerate((2026, 10, 6, 12, 0, 0)):
+            values[index] = value
+        cast(returned, POINTER(DWORD))[0] = 24
+        return True
+
+    sdk.NET_DVR_GetDVRConfig.side_effect = read_clock
     doorbell = Doorbell(config, sdk)
     doorbell.online = True
     doorbell.user_id = 7
@@ -55,9 +65,44 @@ def test_subscription_sends_realtime_options_by_pointer(device, mocker):
     assert device.alarm_since == datetime(2026, 10, 6, 12)
 
 
+def test_subscription_uses_sdk_clock_not_isapi_wall_time(device, mocker):
+    request = mocker.patch.object(device, "_call_isapi", return_value='<Time><localTime>2025-06-01T11:00:00+01:00</localTime></Time>')
+
+    def read_clock(user_id, command, channel, output, length, returned):
+        assert user_id == 7 and command == 118 and channel == -1 and length == 24
+        values = cast(output, POINTER(DWORD))
+        for index, value in enumerate((2025, 6, 1, 12, 0, 0)):
+            values[index] = value
+        cast(returned, POINTER(DWORD))[0] = 24
+        return True
+
+    device.sdk.NET_DVR_GetDVRConfig.side_effect = read_clock
+    device.sdk.NET_DVR_SetupAlarmChan_V50.return_value = 9
+    device.setup_alarm()
+    assert device.alarm_since == datetime(2025, 6, 1, 12)
+    request.assert_not_called()
+
+
 def test_subscription_requires_device_clock(device, mocker):
-    mocker.patch.object(device, "_call_isapi", return_value='<Time/>')
-    with pytest.raises(ValueError, match="clock"):
+    device.sdk.NET_DVR_GetDVRConfig.side_effect = None
+    device.sdk.NET_DVR_GetDVRConfig.return_value = False
+    with pytest.raises(SDKError, match="clock"):
+        device.setup_alarm()
+    device.sdk.NET_DVR_SetupAlarmChan_V50.assert_not_called()
+
+
+@pytest.mark.parametrize("length,year", [(20, 2026), (24, 0)])
+def test_subscription_rejects_incomplete_or_invalid_native_clock(device, length, year):
+    original = device.sdk.NET_DVR_GetDVRConfig.side_effect
+
+    def read_clock(user_id, command, channel, output, size, returned):
+        original(user_id, command, channel, output, size, returned)
+        cast(output, POINTER(DWORD))[0] = year
+        cast(returned, POINTER(DWORD))[0] = length
+        return True
+
+    device.sdk.NET_DVR_GetDVRConfig.side_effect = read_clock
+    with pytest.raises(ValueError):
         device.setup_alarm()
     device.sdk.NET_DVR_SetupAlarmChan_V50.assert_not_called()
 

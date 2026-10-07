@@ -5,7 +5,7 @@ from ctypes import byref, c_byte, c_char_p, cast, sizeof
 from xml.etree import ElementTree
 
 from config import AppConfig
-from sdk.hcnetsdk import NET_DVR_CONTROL_GATEWAY, NET_DVR_DEVICEINFO_V30, NET_DVR_SETUPALARM_PARAM_V50, NET_DVR_VIDEO_CALL_PARAM
+from sdk.hcnetsdk import DWORD, NET_DVR_CONTROL_GATEWAY, NET_DVR_DEVICEINFO_V30, NET_DVR_SETUPALARM_PARAM_V50, NET_DVR_VIDEO_CALL_PARAM
 from sdk.utils import SDKError, call_ISAPI
 
 
@@ -63,11 +63,13 @@ class Doorbell:
         self.firmware = info.findtext("{*}firmwareVersion", "")
 
     def setup_alarm(self):
-        clock = ElementTree.fromstring(self._call_isapi("GET", "/ISAPI/System/time"))
-        local_time = clock.findtext("{*}localTime")
-        if not local_time:
-            raise ValueError("Device clock is required to reject replayed alarms")
-        self.alarm_since = datetime.fromisoformat(local_time.replace("Z", "+00:00")).replace(tzinfo=None, microsecond=0)
+        clock = (DWORD * 6)()
+        returned = DWORD()
+        if not self.sdk.NET_DVR_GetDVRConfig(self.user_id, 118, -1, byref(clock), sizeof(clock), byref(returned)):
+            raise SDKError(self.sdk, "Device clock is required to reject replayed alarms")
+        if returned.value != sizeof(clock):
+            raise ValueError("Incomplete device clock response")
+        self.alarm_since = datetime(*clock)
         alarm = NET_DVR_SETUPALARM_PARAM_V50()
         alarm.dwSize = sizeof(alarm)
         alarm.byLevel = 1
