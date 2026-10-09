@@ -190,7 +190,7 @@ def test_unsupported_status_becomes_unknown_without_repeated_requests(device, mo
 
 def test_logout_closes_alarm_before_login_once(device):
     device.alarm_handle = 9
-    device.card_events.append(("card_unlock", "0012345678", datetime(2026, 10, 6, 12)))
+    device.card_events.append(("access_granted", "0012345678", datetime(2026, 10, 6, 12)))
     device.logout()
     device.logout()
     assert device.sdk.method_calls == [

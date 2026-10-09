@@ -90,7 +90,7 @@ def handle_message(message, devices, bridge):
                        and item.generation == generation and received >= item.connected_at), None)
         if device is None or device.alarm_since is None or occurred < device.alarm_since:
             return
-        if kind not in ("card_unlock", "card_rejected") or not 1 <= len(card) <= 32 or not card.isascii() or not card.isdigit():
+        if kind not in ("access_granted", "access_denied") or not 1 <= len(card) <= 32 or not card.isascii() or not card.isdigit():
             return
         signature = (kind, card, occurred)
         if signature in device.card_events:

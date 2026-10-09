@@ -72,10 +72,10 @@ class EventManager:
                 detail = event.uEventInfo.struUnlockRecord
                 if detail.byUnlockType != 3 or detail.wLockID != 0:
                     return True
-                kind = "card_unlock"
+                kind = "access_granted"
                 raw = bytes(detail.byControlSrc)
             elif event.byEventType == 5:
-                kind = "card_rejected"
+                kind = "access_denied"
                 raw = bytes(event.uEventInfo.struSendCardInfo.byCardNo)
             else:
                 return True

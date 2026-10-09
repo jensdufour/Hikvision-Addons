@@ -43,7 +43,7 @@ def card_message(device, mocker):
     device.connected_at = 40
     device.alarm_since = datetime(2026, 10, 6, 12)
     mocker.patch.object(device, "get_clock", return_value=datetime(2026, 10, 6, 12, 0, 1))
-    message = ["card", 7, "sdkserial", device.generation, "card_unlock", "0012345678",
+    message = ["card", 7, "sdkserial", device.generation, "access_granted", "0012345678",
                datetime(2026, 10, 6, 12, 0, 1), 49]
     bridge = Mock(connected=True, connected_at=40, epoch="current")
     return message, bridge
@@ -54,7 +54,7 @@ def test_fresh_card_event_publishes_once_without_controls_or_ring_state_change(d
     before = (device.state, device.ring_active, device.last_event)
     handle_message(message, [device], bridge)
     handle_message(message, [device], bridge)
-    bridge.card.assert_called_once_with(device, "card_unlock", "0012345678", message[6])
+    bridge.card.assert_called_once_with(device, "access_granted", "0012345678", message[6])
     bridge.ring.assert_not_called()
     device.sdk.NET_DVR_RemoteControl.assert_not_called()
     device.sdk.NET_DVR_SetDVRConfig.assert_not_called()
@@ -63,9 +63,9 @@ def test_fresh_card_event_publishes_once_without_controls_or_ring_state_change(d
 
 def test_rejected_card_is_separate_diagnostic_event(device, card_message):
     message, bridge = card_message
-    message[4] = "card_rejected"
+    message[4] = "access_denied"
     handle_message(message, [device], bridge)
-    bridge.card.assert_called_once_with(device, "card_rejected", message[5], message[6])
+    bridge.card.assert_called_once_with(device, "access_denied", message[5], message[6])
 
 
 @pytest.mark.parametrize("failure", ["expired_queue", "broker_offline", "broker_reconnected",
@@ -143,10 +143,10 @@ def test_card_callback_copies_identity_and_preserves_leading_zeros(device, card_
     source.lUserID = 99
     event.uEventInfo.struUnlockRecord.byControlSrc[0] = 57
     message = inbox.get_nowait()
-    assert message[:6] == ("card", 7, "sdkserial", device.generation, "card_unlock", "0012345678")
+    assert message[:6] == ("card", 7, "sdkserial", device.generation, "access_granted", "0012345678")
 
 
-@pytest.mark.parametrize("kind,method,expected", [(1, 3, "card_unlock"), (5, 0, "card_rejected"),
+@pytest.mark.parametrize("kind,method,expected", [(1, 3, "access_granted"), (5, 0, "access_denied"),
                                                 (1, 1, None), (1, 2, None), (1, 4, None),
                                                 (1, 5, None), (1, 6, None), (1, 7, None),
                                                 (1, 8, None), (1, 9, None), (3, 5, None), (6, 0, None)])

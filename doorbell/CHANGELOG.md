@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4-dev - Unreleased
+
+- Rename Doorbell event type `ring` to `pressed` and Card access types `card_unlock`/`card_rejected` to `access_granted`/`access_denied`.
+- Preserve entity identities, MQTT topics, attributes, freshness guards and control behavior; migrate automation event-type filters when upgrading.
+
 ## 0.1.1-dev - Unreleased
 
 - Read the alarm replay cutoff from the native SDK clock so it uses the same time basis as SDK event timestamps.

@@ -104,7 +104,7 @@ class MQTTBridge:
 
     def ring(self, device):
         if self.connected and device.online and device.outdoor:
-            self.client.publish(f"{self.base(device)}/ring", json.dumps({"event_type": "ring"}), qos=0, retain=False)
+            self.client.publish(f"{self.base(device)}/ring", json.dumps({"event_type": "pressed"}), qos=0, retain=False)
 
     def card(self, device, kind, card_number, occurred):
         if self.connected and device.online and device.outdoor:
@@ -123,8 +123,8 @@ class MQTTBridge:
         entities = [("sensor", "call_state", {"name": "Call state", "state_topic": f"{base}/state", "icon": "mdi:phone"}),
                     ("button", "stop_ringing", {"name": "Stop ringing", "icon": "mdi:phone-cancel"})]
         if device.outdoor:
-            entities += [("event", "ring", {"name": "Doorbell", "state_topic": f"{base}/ring", "event_types": ["ring"], "device_class": "doorbell"}),
-                         ("event", "card", {"name": "Card access", "state_topic": f"{base}/card", "event_types": ["card_unlock", "card_rejected"], "icon": "mdi:card-account-details-outline"}),
+            entities += [("event", "ring", {"name": "Doorbell", "state_topic": f"{base}/ring", "event_types": ["pressed"], "device_class": "doorbell"}),
+                         ("event", "card", {"name": "Card access", "state_topic": f"{base}/card", "event_types": ["access_granted", "access_denied"], "icon": "mdi:card-account-details-outline"}),
                          ("button", "unlock", {"name": "Unlock", "icon": "mdi:door-open"})]
         for domain, key, options in entities:
             payload = {**common, **options, "unique_id": f"hikvision_lite_{identifier}_{key}"}

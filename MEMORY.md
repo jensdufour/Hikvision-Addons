@@ -16,6 +16,8 @@ generic security limits, development checks and SDK provenance only.
 
 ## Protocol And Safety
 
+- Version0.1.4-dev publishes `pressed`, `access_granted` and `access_denied`. Event-type filters must migrate from `ring`, `card_unlock` and `card_rejected`; entity identities/topics and native call-state values remain unchanged. Access granted reports the station's card-authorized unlock record, not physical door position.
+
 - Card access's valid MDI icon is `mdi:card-account-details-outline`, not `mdi:card-account`. An icon string in registry/state does not prove rendering; verify a nonempty SVG path and browser screenshot. Native HA icon overrides take precedence over discovery defaults.
 - Verify exact model and stable serial before enabling controls. Do not add speculative model aliases, including omission of `(B)`. Device replacement at an existing address requires deliberate reviewed restart.
 - Commands are non-retained, broker-epoch/device-generation scoped, expire after three seconds and are not retried after ambiguous failures. Fallback is allowed only on SDK error23. Unlock is outdoor-only; Stop ringing requires fresh ringing state and sends reject, never answer/hang-up.

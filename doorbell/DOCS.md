@@ -44,8 +44,8 @@ topic and does not change call/ring state or send any control command:
 
 | Event Type | Meaning |
 | --- | --- |
-| `card_unlock` | Intercom event type1, unlock method3, local relay0: a card-triggered unlock record |
-| `card_rejected` | Intercom event type5: an invalid/rejected card scan, diagnostic only |
+| `access_granted` | Intercom event type1, unlock method3, local relay0: a card-authorized unlock record, not proof the door physically opened |
+| `access_denied` | Intercom event type5: an invalid/rejected card scan, diagnostic only |
 
 Card access uses `mdi:card-account-details-outline`. The earlier
 `mdi:card-account` name was invalid and could leave an empty icon; an existing
@@ -68,9 +68,9 @@ clock reads or publication are not retried. No native API is called from the
 callback; SDK reads remain on the existing processing loop.
 
 This is an event source, not an access-control policy for another lock. An entry
-automation must explicitly require `card_unlock`, allowlist the intended card
+automation must explicitly require `access_granted`, allowlist the intended card
 number, check current availability/freshness and reject startup/restored events.
-Never use any scan, `card_rejected`, or a generic remote-unlock record as approval.
+Never use any scan, `access_denied`, or a generic remote-unlock record as approval.
 Native card enrollment/validity is managed on the station, not by this add-on.
 
 Card numbers are present on MQTT and may be stored in HA history even though MQTT
@@ -83,6 +83,13 @@ physical effects require separate evidence; synthetic tests do not establish the
 Unlock controls the outdoor station's first relay through the existing SDK command, with ISAPI fallback only on error 23. It does not expose an indoor duplicate unlock control. Stop ringing rejects a current incoming call; it does not hang up an established conversation.
 
 ## Future Migration
+
+Version0.1.4-dev renames the Doorbell event type `ring` to `pressed` and Card
+access types `card_unlock`/`card_rejected` to `access_granted`/`access_denied`.
+Update automation event-type filters when upgrading. Entity unique IDs, MQTT
+topics, names and attributes are unchanged. Stored history retains old types;
+the latest event timestamp is a record of an occurrence, not a held switch.
+Call-state values and button commands are unchanged.
 
 Before enabling controls, verify actual firmware and model readback, outdoor ring events, status polling, and the intended relay. Some firmware may omit the `(B)` suffix. That currently fails closed and needs evidence before adding an explicit mapping.
 

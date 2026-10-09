@@ -64,13 +64,14 @@ def test_reconnect_rotates_topics_and_rejects_old_command(bridge):
 def test_ring_is_never_retained_or_replayed(bridge):
     bridge.client.publish.reset_mock()
     bridge.ring(bridge.devices[0])
+    assert json.loads(bridge.client.publish.call_args.args[1]) == {"event_type": "pressed"}
     assert bridge.client.publish.call_args.kwargs == {"qos": 0, "retain": False}
     bridge.connected = False
     bridge.ring(bridge.devices[0])
     bridge.client.publish.assert_called_once()
 
 
-@pytest.mark.parametrize("kind", ["card_unlock", "card_rejected"])
+@pytest.mark.parametrize("kind", ["access_granted", "access_denied"])
 def test_card_event_has_identifier_attributes_and_is_never_retained(bridge, kind):
     bridge.client.publish.reset_mock()
     bridge.card(bridge.devices[0], kind, "0012345678", datetime(2026, 10, 6, 12))
@@ -88,7 +89,8 @@ def test_card_discovery_is_diagnostic_not_a_command(bridge):
     configs = [json.loads(call.args[1]) for call in bridge.client.publish.call_args_list
                if call.args[0].endswith("/config")]
     card = next(item for item in configs if item["name"] == "Card access")
-    assert card["event_types"] == ["card_unlock", "card_rejected"]
+    assert card["event_types"] == ["access_granted", "access_denied"]
+    assert next(item for item in configs if item["name"] == "Doorbell")["event_types"] == ["pressed"]
     assert card["icon"] == "mdi:card-account-details-outline"
     assert "command_topic" not in card
 
@@ -97,7 +99,7 @@ def test_indoor_does_not_emit_duplicate_ring_or_unlock(bridge):
     bridge.devices[0].config.model = "DS-KH6320-WTE1"
     bridge.client.publish.reset_mock()
     bridge.ring(bridge.devices[0])
-    bridge.card(bridge.devices[0], "card_unlock", "0012345678", datetime(2026, 10, 6, 12))
+    bridge.card(bridge.devices[0], "access_granted", "0012345678", datetime(2026, 10, 6, 12))
     bridge.client.publish.assert_not_called()
     bridge.discover(bridge.devices[0])
     assert bridge.client.publish.call_count == 2
