@@ -16,6 +16,7 @@ generic security limits, development checks and SDK provenance only.
 
 ## Protocol And Safety
 
+- Card access's valid MDI icon is `mdi:card-account-details-outline`, not `mdi:card-account`. An icon string in registry/state does not prove rendering; verify a nonempty SVG path and browser screenshot. Native HA icon overrides take precedence over discovery defaults.
 - Verify exact model and stable serial before enabling controls. Do not add speculative model aliases, including omission of `(B)`. Device replacement at an existing address requires deliberate reviewed restart.
 - Commands are non-retained, broker-epoch/device-generation scoped, expire after three seconds and are not retried after ambiguous failures. Fallback is allowed only on SDK error23. Unlock is outdoor-only; Stop ringing requires fresh ringing state and sends reject, never answer/hang-up.
 - Epochs are not publisher authentication. Restrict broker access and command-topic publishing according to the installation's trust boundary.

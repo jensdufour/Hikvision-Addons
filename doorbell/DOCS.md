@@ -47,6 +47,10 @@ topic and does not change call/ring state or send any control command:
 | `card_unlock` | Intercom event type1, unlock method3, local relay0: a card-triggered unlock record |
 | `card_rejected` | Intercom event type5: an invalid/rejected card scan, diagnostic only |
 
+Card access uses `mdi:card-account-details-outline`. The earlier
+`mdi:card-account` name was invalid and could leave an empty icon; an existing
+HA user icon override takes precedence over MQTT discovery's default.
+
 Attributes are `card_number` (a decimal string, preserving leading zeros) and
 `device_time` (native device-local time without a UTC offset). Use HA's event
 timestamp for HA-side freshness checks, not an assumed UTC interpretation of

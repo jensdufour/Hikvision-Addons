@@ -89,6 +89,7 @@ def test_card_discovery_is_diagnostic_not_a_command(bridge):
                if call.args[0].endswith("/config")]
     card = next(item for item in configs if item["name"] == "Card access")
     assert card["event_types"] == ["card_unlock", "card_rejected"]
+    assert card["icon"] == "mdi:card-account-details-outline"
     assert "command_topic" not in card
 
 

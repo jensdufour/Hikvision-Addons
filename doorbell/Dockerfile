@@ -1,7 +1,7 @@
 FROM python:3.10.21-slim-bookworm
 
 ARG BUILD_ARCH
-ARG BUILD_VERSION=0.1.2-dev
+ARG BUILD_VERSION=0.1.3-dev
 ARG PIP_INDEX_URL=https://pypi.org/simple
 LABEL io.hass.type="addon" io.hass.arch=${BUILD_ARCH} io.hass.version=${BUILD_VERSION}
 WORKDIR /app
