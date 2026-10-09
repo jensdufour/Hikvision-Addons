@@ -9,6 +9,7 @@ Reduced from [pergolafabio/Hikvision-Addons](https://github.com/pergolafabio/Hik
 | Function | Behavior |
 | --- | --- |
 | Doorbell event | One outdoor `ring` event for HA automations |
+| Card access | Outdoor `card_unlock` and diagnostic `card_rejected` events; no automatic controls |
 | Call state | Per-device `idle`, `ringing`, `oncall`, or `unknown` |
 | Unlock | Momentary outdoor first-relay button |
 | Availability | Broker/device health and automatic recovery |

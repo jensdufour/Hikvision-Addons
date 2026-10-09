@@ -1,5 +1,6 @@
 import json
 import re
+from collections import deque
 from datetime import datetime
 from ctypes import byref, c_byte, c_char_p, cast, sizeof
 from xml.etree import ElementTree
@@ -29,6 +30,7 @@ class Doorbell:
         self.last_ring_state_at = 0.0
         self.ring_active = False
         self.poll_supported = True
+        self.card_events = deque(maxlen=128)
 
     @property
     def outdoor(self) -> bool:
@@ -62,14 +64,17 @@ class Doorbell:
         self.serial = serial
         self.firmware = info.findtext("{*}firmwareVersion", "")
 
-    def setup_alarm(self):
+    def get_clock(self):
         clock = (DWORD * 6)()
         returned = DWORD()
         if not self.sdk.NET_DVR_GetDVRConfig(self.user_id, 118, -1, byref(clock), sizeof(clock), byref(returned)):
             raise SDKError(self.sdk, "Device clock is required to reject replayed alarms")
         if returned.value != sizeof(clock):
             raise ValueError("Incomplete device clock response")
-        self.alarm_since = datetime(*clock)
+        return datetime(*clock)
+
+    def setup_alarm(self):
+        self.alarm_since = self.get_clock()
         alarm = NET_DVR_SETUPALARM_PARAM_V50()
         alarm.dwSize = sizeof(alarm)
         alarm.byLevel = 1
@@ -83,6 +88,7 @@ class Doorbell:
         self.online = False
         self.state = "unknown"
         self.alarm_since = None
+        self.card_events.clear()
         self.generation += 1
         failures = []
         for attribute, close in (

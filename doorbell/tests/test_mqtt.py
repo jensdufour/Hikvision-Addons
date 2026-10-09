@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from queue import Queue
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -25,7 +26,7 @@ def bridge(mocker):
 
 def test_discovery_has_only_scoped_entities(bridge):
     configs = [json.loads(call.args[1]) for call in bridge.client.publish.call_args_list if call.args[0].endswith("/config")]
-    assert {item["name"] for item in configs} == {"Call state", "Doorbell", "Unlock", "Stop ringing"}
+    assert {item["name"] for item in configs} == {"Call state", "Doorbell", "Card access", "Unlock", "Stop ringing"}
     for config in configs:
         assert config["availability_mode"] == "all"
         if "command_topic" in config:
@@ -69,10 +70,33 @@ def test_ring_is_never_retained_or_replayed(bridge):
     bridge.client.publish.assert_called_once()
 
 
+@pytest.mark.parametrize("kind", ["card_unlock", "card_rejected"])
+def test_card_event_has_identifier_attributes_and_is_never_retained(bridge, kind):
+    bridge.client.publish.reset_mock()
+    bridge.card(bridge.devices[0], kind, "0012345678", datetime(2026, 10, 6, 12))
+    call = bridge.client.publish.call_args
+    assert call.args[0].endswith("/card")
+    assert json.loads(call.args[1]) == {"event_type": kind, "card_number": "0012345678",
+                                      "device_time": "2026-10-06T12:00:00"}
+    assert call.kwargs == {"qos": 0, "retain": False}
+    bridge.connected = False
+    bridge.card(bridge.devices[0], kind, "0012345678", datetime(2026, 10, 6, 12))
+    bridge.client.publish.assert_called_once()
+
+
+def test_card_discovery_is_diagnostic_not_a_command(bridge):
+    configs = [json.loads(call.args[1]) for call in bridge.client.publish.call_args_list
+               if call.args[0].endswith("/config")]
+    card = next(item for item in configs if item["name"] == "Card access")
+    assert card["event_types"] == ["card_unlock", "card_rejected"]
+    assert "command_topic" not in card
+
+
 def test_indoor_does_not_emit_duplicate_ring_or_unlock(bridge):
     bridge.devices[0].config.model = "DS-KH6320-WTE1"
     bridge.client.publish.reset_mock()
     bridge.ring(bridge.devices[0])
+    bridge.card(bridge.devices[0], "card_unlock", "0012345678", datetime(2026, 10, 6, 12))
     bridge.client.publish.assert_not_called()
     bridge.discover(bridge.devices[0])
     assert bridge.client.publish.call_count == 2

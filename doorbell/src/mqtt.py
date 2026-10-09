@@ -14,6 +14,7 @@ class MQTTBridge:
         self.devices = devices
         self.inbox = inbox
         self.connected = False
+        self.connected_at = 0.0
         self.refresh_needed = False
         self.epoch = ""
         self.commands = {}
@@ -55,6 +56,7 @@ class MQTTBridge:
         if reason_code.is_failure:
             return
         self.epoch = secrets.token_hex(12)
+        self.connected_at = monotonic()
         self.connected = True
         self.commands = {}
         self.refresh_needed = True
@@ -104,6 +106,12 @@ class MQTTBridge:
         if self.connected and device.online and device.outdoor:
             self.client.publish(f"{self.base(device)}/ring", json.dumps({"event_type": "ring"}), qos=0, retain=False)
 
+    def card(self, device, kind, card_number, occurred):
+        if self.connected and device.online and device.outdoor:
+            self.client.publish(f"{self.base(device)}/card", json.dumps({
+                "event_type": kind, "card_number": card_number, "device_time": occurred.isoformat()
+            }), qos=0, retain=False)
+
     def discover(self, device):
         base = self.base(device)
         epoch = self.epoch
@@ -116,6 +124,7 @@ class MQTTBridge:
                     ("button", "stop_ringing", {"name": "Stop ringing", "icon": "mdi:phone-cancel"})]
         if device.outdoor:
             entities += [("event", "ring", {"name": "Doorbell", "state_topic": f"{base}/ring", "event_types": ["ring"], "device_class": "doorbell"}),
+                         ("event", "card", {"name": "Card access", "state_topic": f"{base}/card", "event_types": ["card_unlock", "card_rejected"], "icon": "mdi:card-account"}),
                          ("button", "unlock", {"name": "Unlock", "icon": "mdi:door-open"})]
         for domain, key, options in entities:
             payload = {**common, **options, "unique_id": f"hikvision_lite_{identifier}_{key}"}

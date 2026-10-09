@@ -1,5 +1,5 @@
 from ctypes import cast, pointer, sizeof
-from datetime import datetime
+from datetime import datetime, timedelta
 from queue import Queue
 from time import monotonic
 from unittest.mock import Mock
@@ -10,7 +10,195 @@ from config import AppConfig
 from doorbell import Doorbell
 from event import EventManager
 from main import check_device, handle_message, report_state
-from sdk.hcnetsdk import COMM_ALARM_VIDEO_INTERCOM, NET_DVR_ALARMER, NET_DVR_VIDEO_INTERCOM_ALARM, MessageCallbackAlarmInfoUnion, POINTER
+from sdk.hcnetsdk import (COMM_ALARM_VIDEO_INTERCOM, COMM_UPLOAD_VIDEO_INTERCOM_EVENT,
+                         NET_DVR_ALARMER, NET_DVR_VIDEO_INTERCOM_ALARM, NET_DVR_VIDEO_INTERCOM_EVENT,
+                         MessageCallbackAlarmInfoUnion, POINTER)
+
+
+@pytest.fixture
+def card_frame(device):
+    device.alarm_since = datetime(2026, 10, 6, 12)
+    source = NET_DVR_ALARMER()
+    source.byUserIDValid = 1
+    source.lUserID = device.user_id
+    for index, value in enumerate(device.sdk_serial.encode("ascii")):
+        source.sSerialNumber[index] = value
+    event = NET_DVR_VIDEO_INTERCOM_EVENT()
+    event.dwSize = sizeof(event)
+    event.byEventType = 1
+    event.struTime.wYear = 2026
+    event.struTime.byMonth = 10
+    event.struTime.byDay = 6
+    event.struTime.byHour = 12
+    event.struTime.bySecond = 1
+    event.uEventInfo.struUnlockRecord.byUnlockType = 3
+    for index, value in enumerate(b"0012345678"):
+        event.uEventInfo.struUnlockRecord.byControlSrc[index] = value
+    return source, event
+
+
+@pytest.fixture
+def card_message(device, mocker):
+    mocker.patch("main.monotonic", return_value=50)
+    device.connected_at = 40
+    device.alarm_since = datetime(2026, 10, 6, 12)
+    mocker.patch.object(device, "get_clock", return_value=datetime(2026, 10, 6, 12, 0, 1))
+    message = ["card", 7, "sdkserial", device.generation, "card_unlock", "0012345678",
+               datetime(2026, 10, 6, 12, 0, 1), 49]
+    bridge = Mock(connected=True, connected_at=40, epoch="current")
+    return message, bridge
+
+
+def test_fresh_card_event_publishes_once_without_controls_or_ring_state_change(device, card_message):
+    message, bridge = card_message
+    before = (device.state, device.ring_active, device.last_event)
+    handle_message(message, [device], bridge)
+    handle_message(message, [device], bridge)
+    bridge.card.assert_called_once_with(device, "card_unlock", "0012345678", message[6])
+    bridge.ring.assert_not_called()
+    device.sdk.NET_DVR_RemoteControl.assert_not_called()
+    device.sdk.NET_DVR_SetDVRConfig.assert_not_called()
+    assert (device.state, device.ring_active, device.last_event) == before
+
+
+def test_rejected_card_is_separate_diagnostic_event(device, card_message):
+    message, bridge = card_message
+    message[4] = "card_rejected"
+    handle_message(message, [device], bridge)
+    bridge.card.assert_called_once_with(device, "card_rejected", message[5], message[6])
+
+
+@pytest.mark.parametrize("failure", ["expired_queue", "broker_offline", "broker_reconnected",
+                                    "device_offline", "device_reconnected", "old_session",
+                                    "wrong_user", "wrong_serial", "indoor", "missing_cutoff",
+                                    "replay", "old_clock", "future", "clock_error", "bad_kind",
+                                    "empty_card", "bad_card", "oversized_card"])
+def test_card_processing_fails_closed(device, card_message, failure):
+    message, bridge = card_message
+    if failure == "expired_queue":
+        message[7] = 46
+    elif failure == "broker_offline":
+        bridge.connected = False
+    elif failure == "broker_reconnected":
+        bridge.connected_at = 50
+    elif failure == "device_offline":
+        device.online = False
+    elif failure == "device_reconnected":
+        device.generation += 1
+    elif failure == "old_session":
+        device.connected_at = 50
+    elif failure == "wrong_user":
+        message[1] = 8
+    elif failure == "wrong_serial":
+        message[2] = "other"
+    elif failure == "indoor":
+        device.config.model = "DS-KH6320-WTE1"
+    elif failure == "missing_cutoff":
+        device.alarm_since = None
+    elif failure == "replay":
+        message[6] = device.alarm_since - timedelta(seconds=1)
+    elif failure == "old_clock":
+        device.get_clock.return_value = message[6] + timedelta(seconds=4)
+    elif failure == "future":
+        device.get_clock.return_value = message[6] - timedelta(seconds=1)
+    elif failure == "clock_error":
+        device.get_clock.side_effect = RuntimeError("clock unavailable")
+    elif failure == "bad_kind":
+        message[4] = "enrollment"
+    elif failure == "empty_card":
+        message[5] = ""
+    elif failure == "bad_card":
+        message[5] = "123x"
+    else:
+        message[5] = "1" * 33
+    handle_message(message, [device], bridge)
+    bridge.card.assert_not_called()
+    device.sdk.NET_DVR_RemoteControl.assert_not_called()
+    assert not device.card_events
+
+
+@pytest.mark.parametrize("failure", ["expired_queue", "broker_reconnected", "device_reconnected", "device_offline"])
+def test_card_read_rechecks_session_and_age_after_native_clock(device, card_message, mocker, failure):
+    message, bridge = card_message
+    def clock():
+        if failure == "expired_queue":
+            mocker.patch("main.monotonic", return_value=53)
+        elif failure == "broker_reconnected":
+            bridge.epoch = "new"
+        elif failure == "device_reconnected":
+            device.generation += 1
+        else:
+            device.online = False
+        return message[6]
+    device.get_clock.side_effect = clock
+    handle_message(message, [device], bridge)
+    bridge.card.assert_not_called()
+
+
+def test_card_callback_copies_identity_and_preserves_leading_zeros(device, card_frame):
+    source, event = card_frame
+    inbox = Queue()
+    manager = EventManager(Mock(), inbox, [device])
+    manager.receive(COMM_UPLOAD_VIDEO_INTERCOM_EVENT, pointer(source), pointer(event), sizeof(event), None)
+    source.lUserID = 99
+    event.uEventInfo.struUnlockRecord.byControlSrc[0] = 57
+    message = inbox.get_nowait()
+    assert message[:6] == ("card", 7, "sdkserial", device.generation, "card_unlock", "0012345678")
+
+
+@pytest.mark.parametrize("kind,method,expected", [(1, 3, "card_unlock"), (5, 0, "card_rejected"),
+                                                (1, 1, None), (1, 2, None), (1, 4, None),
+                                                (1, 5, None), (1, 6, None), (1, 7, None),
+                                                (1, 8, None), (1, 9, None), (3, 5, None), (6, 0, None)])
+def test_card_callback_distinguishes_rejection_enrollment_and_other_methods(device, card_frame, kind, method, expected):
+    source, event = card_frame
+    event.byEventType = kind
+    event.uEventInfo.struUnlockRecord.byUnlockType = method
+    if kind == 5:
+        for index, value in enumerate(b"0012345678"):
+            event.uEventInfo.struSendCardInfo.byCardNo[index] = value
+    inbox = Queue()
+    EventManager(Mock(), inbox, [device]).receive(
+        COMM_UPLOAD_VIDEO_INTERCOM_EVENT, pointer(source), pointer(event), sizeof(event), None)
+    assert (inbox.get_nowait()[4] if not inbox.empty() else None) == expected
+
+
+@pytest.mark.parametrize("failure", ["truncated", "wrong_size", "bad_time", "replay", "offline",
+                                    "indoor", "wrong_user", "no_user", "wrong_serial", "external_lock",
+                                    "empty_card", "bad_card", "queue_full"])
+def test_card_callback_fails_closed(device, card_frame, failure):
+    source, event = card_frame
+    length = sizeof(event)
+    inbox = Queue(maxsize=1)
+    if failure == "truncated":
+        length -= 1
+    elif failure == "wrong_size":
+        event.dwSize = 0
+    elif failure == "bad_time":
+        event.struTime.byMonth = 0
+    elif failure == "replay":
+        event.struTime.byDay = 5
+    elif failure == "offline":
+        device.online = False
+    elif failure == "indoor":
+        device.config.model = "DS-KH6320-WTE1"
+    elif failure == "wrong_user":
+        source.lUserID += 1
+    elif failure == "no_user":
+        source.byUserIDValid = 0
+    elif failure == "wrong_serial":
+        source.sSerialNumber[0] = 88
+    elif failure == "external_lock":
+        event.uEventInfo.struUnlockRecord.wLockID = 1
+    elif failure == "empty_card":
+        event.uEventInfo.struUnlockRecord.byControlSrc[0] = 0
+    elif failure == "bad_card":
+        event.uEventInfo.struUnlockRecord.byControlSrc[0] = 127
+    else:
+        inbox.put_nowait("existing")
+    EventManager(Mock(), inbox, [device]).receive(
+        COMM_UPLOAD_VIDEO_INTERCOM_EVENT, pointer(source), pointer(event), length, None)
+    assert list(inbox.queue) == (["existing"] if failure == "queue_full" else [])
 
 
 @pytest.fixture

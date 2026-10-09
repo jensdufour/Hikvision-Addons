@@ -4,7 +4,8 @@ from queue import Full
 from time import monotonic
 
 from loguru import logger
-from sdk.hcnetsdk import COMM_ALARM_VIDEO_INTERCOM, NET_DVR_VIDEO_INTERCOM_ALARM, fMessageCallBack
+from sdk.hcnetsdk import (COMM_ALARM_VIDEO_INTERCOM, COMM_UPLOAD_VIDEO_INTERCOM_EVENT,
+                         NET_DVR_VIDEO_INTERCOM_ALARM, NET_DVR_VIDEO_INTERCOM_EVENT, fMessageCallBack)
 from sdk.utils import SDKError
 
 
@@ -20,6 +21,8 @@ class EventManager:
             raise SDKError(self.sdk, "Cannot subscribe to SDK events")
 
     def receive(self, command, device_pointer, alarm_pointer, length, user_pointer):
+        if command == COMM_UPLOAD_VIDEO_INTERCOM_EVENT:
+            return self.receive_card(device_pointer, alarm_pointer, length)
         if command != COMM_ALARM_VIDEO_INTERCOM or not device_pointer or not alarm_pointer:
             return True
         if length < sizeof(NET_DVR_VIDEO_INTERCOM_ALARM):
@@ -47,4 +50,47 @@ class EventManager:
             logger.warning("Discarded an invalid or overflowing SDK event")
         except Exception:
             logger.error("SDK event decoding failed")
+        return True
+
+    def receive_card(self, device_pointer, event_pointer, length):
+        if not device_pointer or not event_pointer or length < sizeof(NET_DVR_VIDEO_INTERCOM_EVENT):
+            return True
+        try:
+            source = device_pointer.contents
+            if not source.byUserIDValid:
+                return True
+            serial = bytes(source.sSerialNumber).split(b"\0", 1)[0].decode("ascii")
+            owner = next((item for item in self.devices if item.user_id == source.lUserID
+                          and item.sdk_serial == serial), None)
+            if owner is None or not owner.online or not owner.outdoor or owner.alarm_since is None:
+                return True
+            event = NET_DVR_VIDEO_INTERCOM_EVENT.from_buffer_copy(
+                string_at(event_pointer, sizeof(NET_DVR_VIDEO_INTERCOM_EVENT)))
+            if event.dwSize != sizeof(NET_DVR_VIDEO_INTERCOM_EVENT):
+                return True
+            if event.byEventType == 1:
+                detail = event.uEventInfo.struUnlockRecord
+                if detail.byUnlockType != 3 or detail.wLockID != 0:
+                    return True
+                kind = "card_unlock"
+                raw = bytes(detail.byControlSrc)
+            elif event.byEventType == 5:
+                kind = "card_rejected"
+                raw = bytes(event.uEventInfo.struSendCardInfo.byCardNo)
+            else:
+                return True
+            card = raw.split(b"\0", 1)[0]
+            if not card or not card.isdigit():
+                return True
+            stamp = event.struTime
+            occurred = datetime(stamp.wYear, stamp.byMonth, stamp.byDay,
+                                stamp.byHour, stamp.byMinute, stamp.bySecond)
+            if occurred < owner.alarm_since:
+                return True
+            self.inbox.put_nowait(("card", int(source.lUserID), serial, owner.generation,
+                                  kind, card.decode("ascii"), occurred, monotonic()))
+        except (Full, UnicodeError, ValueError):
+            logger.warning("Discarded an invalid or overflowing card event")
+        except Exception:
+            logger.error("Card event decoding failed")
         return True

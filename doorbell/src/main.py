@@ -1,5 +1,6 @@
 import signal
 import sys
+from datetime import timedelta
 from queue import Empty, Queue
 from threading import Event
 from time import monotonic
@@ -80,6 +81,33 @@ def check_device(device, devices, bridge, poll_seconds, alarms=None):
 
 
 def handle_message(message, devices, bridge):
+    if message[0] == "card":
+        _, user_id, serial, generation, kind, card, occurred, received = message
+        if not bridge.connected or received < bridge.connected_at or monotonic() - received > 3:
+            return
+        device = next((item for item in devices if item.online and item.outdoor
+                       and item.user_id == user_id and item.sdk_serial == serial
+                       and item.generation == generation and received >= item.connected_at), None)
+        if device is None or device.alarm_since is None or occurred < device.alarm_since:
+            return
+        if kind not in ("card_unlock", "card_rejected") or not 1 <= len(card) <= 32 or not card.isascii() or not card.isdigit():
+            return
+        signature = (kind, card, occurred)
+        if signature in device.card_events:
+            return
+        epoch = bridge.epoch
+        try:
+            now = device.get_clock()
+            if not occurred <= now <= occurred + timedelta(seconds=3):
+                return
+            if (not bridge.connected or bridge.epoch != epoch or generation != device.generation
+                    or not device.online or monotonic() - received > 3):
+                return
+            device.card_events.append(signature)
+            bridge.card(device, kind, card, occurred)
+        except Exception:
+            logger.warning("Card event freshness or publication could not be verified")
+        return
     if message[0] == "alarm":
         _, user_id, serial, state, received = message
         for device in devices:

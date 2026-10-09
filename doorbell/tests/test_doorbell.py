@@ -190,12 +190,14 @@ def test_unsupported_status_becomes_unknown_without_repeated_requests(device, mo
 
 def test_logout_closes_alarm_before_login_once(device):
     device.alarm_handle = 9
+    device.card_events.append(("card_unlock", "0012345678", datetime(2026, 10, 6, 12)))
     device.logout()
     device.logout()
     assert device.sdk.method_calls == [
         ("NET_DVR_CloseAlarmChan_V30", (9,), {}), ("NET_DVR_Logout_V30", (7,), {})]
     assert not device.online
     assert device.user_id == -1
+    assert not device.card_events
 
 
 @pytest.mark.parametrize("alarm_closed,logged_out", [(False, True), (True, False), (False, False)])

@@ -2,7 +2,7 @@
 
 Unreleased experimental bridge for DS-KV6113-WPE1(B) and DS-KH6320-WTE1 only.
 
-Retains ring events, call state, outdoor Unlock, availability/recovery and Stop ringing. Camera media belongs in Frigate; notifications belong in Home Assistant automations.
+Retains ring events, card-access events, call state, outdoor Unlock, availability/recovery and Stop ringing. Card events do not send controls. Camera media belongs in Frigate; notifications belong in Home Assistant automations.
 
 This directory is the complete native add-on build context: manifest, Dockerfile, runtime, SDK bundles and tests. Supervisor builds it locally; no prebuilt image or separate bridge service is required. The add-on is experimental and defaults to manual startup.
 

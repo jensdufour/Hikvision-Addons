@@ -22,7 +22,7 @@ The [test configuration example](default_config.json) uses documentation-only IP
 
 | Device | Entities |
 | --- | --- |
-| Outdoor | Doorbell event, Call state, Unlock button, Stop ringing button |
+| Outdoor | Doorbell event, Card access event, Call state, Unlock button, Stop ringing button |
 | Indoor | Call state, Stop ringing button |
 
 Availability combines broker/bridge connectivity and that device's health. The indoor station does not emit a second ring notification. Use the outdoor event entity's `ring` event in a Home Assistant automation; add Frigate imagery there if desired. SDK events and polling for the same ringing episode are deduplicated. Events are not retained or replayed when the broker returns.
@@ -36,6 +36,45 @@ Outdoor polls cannot emit ring events or reset notification deduplication. A cur
 Controls require verified model/serial and a current connection. Command topics rotate with broker/device sessions, retained commands are rejected, and queued commands expire after three seconds. Ambiguous failures are not retried. Failed native cleanup remains tracked and blocks a replacement login while the device stays unavailable.
 
 These guards do not authenticate MQTT publishers. Anyone able to publish to the broker's command topics can request a control action. Use broker authentication and topic ACLs appropriate to the installation's trust boundary. No public listener is added by this add-on.
+
+### Card Access Events
+
+The outdoor **Card access** event entity uses its own non-retained, QoS0 MQTT
+topic and does not change call/ring state or send any control command:
+
+| Event Type | Meaning |
+| --- | --- |
+| `card_unlock` | Intercom event type1, unlock method3, local relay0: a card-triggered unlock record |
+| `card_rejected` | Intercom event type5: an invalid/rejected card scan, diagnostic only |
+
+Attributes are `card_number` (a decimal string, preserving leading zeros) and
+`device_time` (native device-local time without a UTC offset). Use HA's event
+timestamp for HA-side freshness checks, not an assumed UTC interpretation of
+`device_time`. Card issuing/enrollment, the SDK's unused authentication record,
+external-relay records and password/duress/householder/platform/Bluetooth/QR/face/
+fingerprint unlocks are not published as card events.
+
+Callbacks copy identifiers before returning and reject incomplete/malformed
+buffers, invalid device/session identity, missing subscription clocks and older
+records. The serialized runtime rechecks the native clock: future or older-than-
+three-second records are dropped, as are expired queues and records received
+before the current device/broker session. The same type/card/device-second is
+deduplicated in a bounded128-record cache, cleared on device cleanup. Failed
+clock reads or publication are not retried. No native API is called from the
+callback; SDK reads remain on the existing processing loop.
+
+This is an event source, not an access-control policy for another lock. An entry
+automation must explicitly require `card_unlock`, allowlist the intended card
+number, check current availability/freshness and reject startup/restored events.
+Never use any scan, `card_rejected`, or a generic remote-unlock record as approval.
+Native card enrollment/validity is managed on the station, not by this add-on.
+
+Card numbers are present on MQTT and may be stored in HA history even though MQTT
+events are not retained. Restrict access accordingly. Event freshness and hashes
+do not authenticate publishers: before using these events for another lock,
+authenticate MQTT clients and restrict publication to the event topics. A card
+number alone is not proof against cloning. Firmware-specific event delivery and
+physical effects require separate evidence; synthetic tests do not establish them.
 
 Unlock controls the outdoor station's first relay through the existing SDK command, with ISAPI fallback only on error 23. It does not expose an indoor duplicate unlock control. Stop ringing rejects a current incoming call; it does not hang up an established conversation.
 
